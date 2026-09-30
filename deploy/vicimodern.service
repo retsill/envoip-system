@@ -1,0 +1,20 @@
+[Unit]
+Description=Vicidial Moderno (API Node + interfaz React)
+After=network.target mariadb.service mysql.service apache2.service
+
+[Service]
+Type=simple
+User=vicimodern
+Group=vicimodern
+WorkingDirectory=/opt/vicimodern/server
+EnvironmentFile=/opt/vicimodern/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
