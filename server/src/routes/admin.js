@@ -138,6 +138,13 @@ router.post(
     const p = userFields(b, { creating: true });
     assertCanManageLevel(req.perms, p.agent_user_level);
     const message = await nonAgentApi('add_user', { agent_user: user, ...p });
+    // Agentes: sin ventana de elegir colas (bloquearía la conexión automática) y en modo «blended»
+    // (entrantes y salientes). Sin esto Vicidial los deja solo para entrantes y la marcación automática no les llama.
+    if (Number(p.agent_user_level) < 7) {
+      await nonAgentApi('update_user', {
+        agent_user: user, agent_choose_ingroups: '0', agent_choose_blended: '0', closer_default_blended: '1',
+      }).catch(() => {});
+    }
     res.json({ ok: true, message });
   })
 );
