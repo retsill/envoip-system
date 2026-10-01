@@ -133,7 +133,7 @@ las contraseñas ya generadas. Hace esto:
 | 8 | Usuario de API `apimodern`, usuario MySQL de solo lectura `modern_ro`, base de datos propia `envoip` y el archivo `/opt/vicimodern/.env` con contraseñas aleatorias. |
 | 8a | `externaddr` con la IP pública: sin ella los teléfonos que llegan por el proxy `/ws` envían su voz a 127.0.0.1 (audio en un solo sentido). |
 | 8b–8c | SMS entre extensiones (SIP MESSAGE) y chat interno de Vicidial. |
-| 8d | Completa el asistente de primer inicio de Vicidial **sin** resetear los teléfonos, carga las zonas horarias si faltan, instala el códec **Opus** y activa el búfer de jitter adaptativo (ver «Calidad de audio» en el apartado 8). |
+| 8d | Completa el asistente de primer inicio de Vicidial **sin** resetear los teléfonos, carga las zonas horarias si faltan, instala el códec **Opus** y desactiva el relleno genérico de pérdidas de Asterisk (ver «Calidad de audio» en el apartado 8). |
 | 9 | Regenera la configuración de Asterisk. |
 | 10 | Compila la web e instala el servicio `vicimodern` y el proxy de Apache. |
 
@@ -223,7 +223,8 @@ elige por cuál sale con su **prefijo** y su **Caller ID**. Ejemplo con voip.ms:
 
 - **Opus** (lo instala el script): tolera la pérdida de paquetes; con G.711/ulaw las redes wifi o domésticas
   se oyen cortadas. Tras instalarlo hay que **reiniciar Asterisk** una vez (`asterisk -rx "core restart when convenient"`).
-- **Búfer de jitter adaptativo** (`jbforce=yes`, `jbimpl=adaptive` en `sip.conf`).
+- **Sin relleno genérico de pérdidas** (`genericplc => false` en `codecs.conf`): con Opus, el PLC de Asterisk repetía el
+  último trozo de voz («Hola, Hola, Hola» cada vez más bajo). **No fuerces el búfer de jitter** (`jbforce=yes`): agrava ese efecto.
 - **App EnVoIP Phone 1.0.8 o superior**: ganancia automática del micrófono (voz baja) y, en Mac, el permiso de red
   que necesita el audio UDP de WebRTC.
 - Los agentes conviene que usen cable o buena wifi y auriculares con micrófono.
@@ -307,6 +308,8 @@ Asterisk y los procesos de Vicidial; hasta entonces los agentes pueden ver aviso
 |---|---|
 | La web `/modern/` da error 503 | El servicio no está en marcha: `systemctl restart vicimodern` y mira `journalctl -u vicimodern -n 50`. |
 | «Usuario o contraseña incorrectos» con datos correctos | El usuario está inactivo, o Vicidial tiene las contraseñas cifradas activadas (no admitido en 1.0). |
+| El cliente oye la voz del agente repetida y cada vez más baja («Hola, Hola, Hola») | Relleno genérico de pérdidas de Asterisk: `genericplc => false` en `codecs.conf`, `jbforce = no` en `sip.conf` y `asterisk -rx "core reload"`. |
+| El agente no puede marcar a mano («not allowed to place manual dial calls») | Permiso «Agent Call Manual» del usuario: `agentcall_manual=1`. EnVoip System lo activa al crear agentes. |
 | Cliente oye al agente muy bajo o entrecortado | Comprueba que `asterisk -rx "module show like codec_opus"` diga *Running* (si no, reinicia Asterisk una vez), que el teléfono muestre `Codecs: (opus\|ulaw)` en `sip show peer EXT`, y que el agente use la app 1.0.8+ o el navegador con buena conexión. |
 | Voz en un solo sentido con la app (Mac) | App anterior a 1.0.7: le faltaba el permiso de red para el audio UDP. Actualízala. |
 | El agente está «Disponible» y no le llegan llamadas automáticas | En `vicidial_live_agents` aparece como `CLOSER`: el agente está solo para entrantes. Los agentes deben tener «blended» (`closer_default_blended=1`, `agent_choose_ingroups=0`); EnVoip System lo pone al crearlos. Tras cambiarlo, el agente debe reconectarse. |

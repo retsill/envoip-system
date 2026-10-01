@@ -191,7 +191,7 @@ q "UPDATE vicidial_campaigns SET allow_closers='Y',
      closer_campaigns = CONCAT(' ', CONCAT_WS(' ', NULLIF(TRIM(BOTH ' ' FROM REPLACE(IFNULL(closer_campaigns,''), ' -', '')), ''), '$INGROUP'), ' -')
    WHERE IFNULL(closer_campaigns,'') NOT LIKE '% $INGROUP %'"
 q "UPDATE vicidial_users SET closer_campaigns=' $INGROUP -', agent_choose_ingroups='0', agent_choose_blended='0',
-     closer_default_blended='1'
+     closer_default_blended='1', agentcall_manual='1'
    WHERE user_level < 7 AND api_only_user <> '1' AND user NOT IN ('VDAD','VDCL') AND IFNULL(TRIM(closer_campaigns),'') IN ('','-')"
 # vicidial.php solo carga colas si la campaña permite entrada y NO es 'MANUAL'.
 # INBOUND_MAN es el modo de Vicidial para marcar a mano y además recibir llamadas de las colas.
@@ -252,7 +252,7 @@ fi
 q "GRANT ALL PRIVILEGES ON envoip.* TO 'envoip_app'@'localhost'"
 # Única escritura directa en Vicidial: tres opciones de agente que su API no permite cambiar
 # (sin ellas los agentes nuevos quedan solo para entrantes y la marcación automática no les llama).
-q "GRANT UPDATE (agent_choose_ingroups, agent_choose_blended, closer_default_blended) ON asterisk.vicidial_users TO 'modern_ro'@'localhost'"
+q "GRANT UPDATE (agent_choose_ingroups, agent_choose_blended, closer_default_blended, agentcall_manual) ON asterisk.vicidial_users TO 'modern_ro'@'localhost'"
 mkdir -p "$APP/data/sms-media" && chown -R vicimodern:vicimodern "$APP/data" 2>/dev/null || true
 # Permisos que usa el admin moderno. Las opciones que OCULTAN datos (hide/block) se dejan en 0.
 COLS=$(q "SELECT column_name FROM information_schema.columns WHERE table_schema='asterisk' AND table_name='vicidial_users'
@@ -343,13 +343,15 @@ fi
 q "UPDATE vicidial_conf_templates SET template_contents = CONCAT(TRIM(TRAILING CHAR(10) FROM TRIM(TRAILING CHAR(13) FROM TRIM(TRAILING CHAR(10) FROM template_contents))),
      CHAR(10), 'disallow=all', CHAR(10), 'allow=opus', CHAR(10), 'allow=ulaw', CHAR(10))
    WHERE template_id='VICIphoneSIP' AND template_contents NOT LIKE '%allow=opus%'"
-# Búfer de jitter adaptativo también entre teléfonos SIP: los paquetes que llegan tarde se reordenan en vez de oírse como cortes
-if grep -qE '^jbforce *= *no' /etc/asterisk/sip.conf; then
-  cp -p /etc/asterisk/sip.conf "/etc/asterisk/sip.conf.bak-$(date +%Y%m%d%H%M%S)"
-  sed -i -E 's/^jbforce *= *no/jbforce = yes/; s/^jbimpl *= *fixed/jbimpl = adaptive/; s/^jbmaxsize *= *100/jbmaxsize = 200/' /etc/asterisk/sip.conf
-  asterisk -rx "sip reload" >/dev/null
+# Sin relleno genérico de pérdidas (PLC) de Asterisk: al convertir Opus→ulaw repetía el último trozo de voz
+# («Hola, Hola, Hola» cada vez más bajo). Opus ya trae su propio PLC y corrección de errores (FEC).
+# El búfer de jitter se deja como viene en ViciBox (forzarlo agrava ese efecto).
+if grep -qE '^genericplc *=> *true' /etc/asterisk/codecs.conf; then
+  cp -p /etc/asterisk/codecs.conf "/etc/asterisk/codecs.conf.bak-$(date +%Y%m%d%H%M%S)"
+  sed -i -E 's/^genericplc *=> *true/genericplc => false/' /etc/asterisk/codecs.conf
+  asterisk -rx "core reload" >/dev/null 2>&1 || true
 fi
-grep -E '^(jbforce|jbimpl)' /etc/asterisk/sip.conf
+grep -E '^genericplc' /etc/asterisk/codecs.conf
 
 # -----------------------------------------------------------------------------
 step "9. Regenerar configuración de Asterisk"
