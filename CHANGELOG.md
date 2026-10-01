@@ -1,5 +1,19 @@
 # Novedades
 
+## 1.0.1 — 2026-10-01
+
+Mejoras aprendidas en la primera instalación de producción.
+
+- **Audio:** WebSocket SIP por HTTPS 443 (`/ws`, compatible con Cloudflare) reenviado a Asterisk por WSS;
+  `externaddr` para evitar audio en un solo sentido; comprobación cada 30 s de los teléfonos; códec **Opus** y
+  búfer de jitter adaptativo contra los cortes.
+- **Instalación:** crea el grupo de sistema, completa el asistente de primer inicio de Vicidial sin resetear los
+  teléfonos y carga las zonas horarias si faltan.
+- **Agentes:** los nuevos se crean en modo blended (la marcación automática les llama); si el cliente cuelga se pasa
+  solo a calificar; calificar espera a que Vicidial cuelgue.
+- **Interfaz:** calificaciones traducidas al idioma de la web; los errores momentáneos (reinicio del servicio) no se muestran.
+- **Guía:** IP fija en VPS sin DHCP, varias empresas con subcuentas independientes, cortafuegos SIP y calidad de audio.
+
 ## 1.0.0 — 2026-09-30
 
 Primera versión pública.

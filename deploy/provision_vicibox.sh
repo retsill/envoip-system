@@ -307,6 +307,51 @@ q "UPDATE system_settings SET allow_chats='1'"
 q "SELECT CONCAT('allow_chats = ', allow_chats) FROM system_settings"
 
 # -----------------------------------------------------------------------------
+step "8d. Primer inicio de Vicidial, zonas horarias y calidad de audio"
+# Vicidial recién instalado bloquea el admin con un asistente de primer inicio que, además, cambia la contraseña
+# de TODOS los teléfonos. Se marca como hecho sin ejecutarlo y con contraseñas por defecto robustas para los nuevos.
+if [ "$(q "SELECT first_login_trigger FROM system_settings")" = "Y" ]; then
+  q "UPDATE system_settings SET first_login_trigger='N',
+     default_phone_registration_password='$(openssl rand -hex 8)', default_phone_login_password='$(openssl rand -hex 6)'"
+  echo "asistente de primer inicio: completado (sin tocar los teléfonos existentes)"
+fi
+# Tablas de prefijos y códigos postales con su zona horaria. Si ViciBox se instaló sin red quedan vacías y todos
+# los leads se cargan con GMT 0 (el horario de llamadas se aplicaría a la hora de Londres).
+if [ "$(q "SELECT COUNT(*) FROM vicidial_phone_codes")" -lt 100 ]; then
+  (cd /usr/share/astguiclient && ./ADMIN_area_code_populate.pl --purge-table >/dev/null 2>&1) || true
+fi
+echo "prefijos con zona horaria: $(q "SELECT COUNT(*) FROM vicidial_phone_codes")"
+# Opus: códec de los navegadores y la app que tolera la pérdida de paquetes (G.711 se oye cortado en redes malas).
+# Asterisk 18 de ViciBox no trae el traductor: se instala el oficial de Sangoma/Digium (gratuito).
+M=/usr/lib64/asterisk/modules
+if [ ! -f $M/codec_opus.so ]; then
+  tmp=$(mktemp -d)
+  if curl -fsS -m 120 -o $tmp/opus.tgz https://downloads.digium.com/pub/telephony/codec_opus/asterisk-18.0/x86-64/codec_opus-18.0_current-x86_64.tar.gz; then
+    tar xzf $tmp/opus.tgz -C $tmp && d=$(find $tmp -maxdepth 1 -type d -name 'codec_opus-*')
+    install -m 755 $d/codec_opus.so $M/
+    # Sin su documentación XML el módulo no carga («failed to register sorcery object type 'opus'»)
+    DOC=$(asterisk -rx "core show settings" 2>/dev/null | awk -F': *' '/Data directory/{print $2}')
+    mkdir -p "${DOC:-/usr/share/asterisk}/documentation/thirdparty"
+    cp $d/codec_opus_config-en_US.xml "${DOC:-/usr/share/asterisk}/documentation/thirdparty/"
+    echo "codec_opus instalado: se activa en el próximo reinicio de Asterisk (core restart when convenient)"
+  else
+    echo "AVISO: no se pudo descargar codec_opus; los teléfonos usarán ulaw"
+  fi
+  rm -rf $tmp
+fi
+# Teléfonos WebRTC: Opus preferido y ulaw de respaldo (Asterisk convierte a ulaw para el proveedor)
+q "UPDATE vicidial_conf_templates SET template_contents = CONCAT(TRIM(TRAILING CHAR(10) FROM TRIM(TRAILING CHAR(13) FROM TRIM(TRAILING CHAR(10) FROM template_contents))),
+     CHAR(10), 'disallow=all', CHAR(10), 'allow=opus', CHAR(10), 'allow=ulaw', CHAR(10))
+   WHERE template_id='VICIphoneSIP' AND template_contents NOT LIKE '%allow=opus%'"
+# Búfer de jitter adaptativo también entre teléfonos SIP: los paquetes que llegan tarde se reordenan en vez de oírse como cortes
+if grep -qE '^jbforce *= *no' /etc/asterisk/sip.conf; then
+  cp -p /etc/asterisk/sip.conf "/etc/asterisk/sip.conf.bak-$(date +%Y%m%d%H%M%S)"
+  sed -i -E 's/^jbforce *= *no/jbforce = yes/; s/^jbimpl *= *fixed/jbimpl = adaptive/; s/^jbmaxsize *= *100/jbmaxsize = 200/' /etc/asterisk/sip.conf
+  asterisk -rx "sip reload" >/dev/null
+fi
+grep -E '^(jbforce|jbimpl)' /etc/asterisk/sip.conf
+
+# -----------------------------------------------------------------------------
 step "9. Regenerar configuración de Asterisk"
 q "UPDATE servers SET rebuild_conf_files='Y' WHERE server_ip='$SERVER_IP'"
 for i in $(seq 1 45); do

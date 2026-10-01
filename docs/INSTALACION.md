@@ -52,6 +52,21 @@ No hace falta instalarlo a mano:
 
 ## 2. Comprobar que Vicidial funciona
 
+> **Servidores VPS sin DHCP (Contabo y similares):** si ViciBox se instaló sin red, el servidor arranca sin IP
+> y no hay acceso por SSH. Entra por la consola VNC del proveedor y pon la IP fija que te asignaron:
+> ```bash
+> cat > /etc/sysconfig/network/ifcfg-eth0 <<EOF
+> BOOTPROTO=static
+> IPADDR=IP_DEL_SERVIDOR/24
+> STARTMODE=auto
+> EOF
+> echo "default PUERTA_DE_ENLACE - eth0" > /etc/sysconfig/network/routes   # normalmente la .1 de tu red
+> sed -i 's/^NETCONFIG_DNS_STATIC_SERVERS=.*/NETCONFIG_DNS_STATIC_SERVERS="1.1.1.1 8.8.8.8"/' /etc/sysconfig/network/config
+> netconfig update -f && systemctl restart network
+> ```
+> Comprueba también que `VARserver_ip` de `/etc/astguiclient.conf` sea esa IP. El script de instalación rellena
+> después las tablas de zonas horarias que ViciBox no pudo descargar sin red.
+
 Antes de instalar, en el servidor:
 
 ```bash
@@ -116,7 +131,9 @@ las contraseñas ya generadas. Hace esto:
 | 5–6 | Cola de entrada `SOPORTE` y extensión interna **7000** que llama a esa cola. |
 | 7 | Las campañas existentes permiten llamadas entrantes y los agentes reciben la cola. |
 | 8 | Usuario de API `apimodern`, usuario MySQL de solo lectura `modern_ro`, base de datos propia `envoip` y el archivo `/opt/vicimodern/.env` con contraseñas aleatorias. |
+| 8a | `externaddr` con la IP pública: sin ella los teléfonos que llegan por el proxy `/ws` envían su voz a 127.0.0.1 (audio en un solo sentido). |
 | 8b–8c | SMS entre extensiones (SIP MESSAGE) y chat interno de Vicidial. |
+| 8d | Completa el asistente de primer inicio de Vicidial **sin** resetear los teléfonos, carga las zonas horarias si faltan, instala el códec **Opus** y activa el búfer de jitter adaptativo (ver «Calidad de audio» en el apartado 8). |
 | 9 | Regenera la configuración de Asterisk. |
 | 10 | Compila la web e instala el servicio `vicimodern` y el proxy de Apache. |
 
@@ -179,6 +196,37 @@ para **VoIP.ms** (se puede usar cualquier proveedor SIP configurando el carrier 
 5. Para que Vicidial **marque solo** los leads, cambia el **Método** de la campaña de `INBOUND_MAN`
    (manual) a `RATIO` (nivel 1–2 para empezar) o `ADAPT_AVERAGE` (predictivo).
    **No lo hagas sin carrier activo**: las llamadas fallarían y los leads quedarían marcados como llamados.
+
+### Varias empresas o números con subcuentas independientes
+
+Cada subcuenta del proveedor se crea como **un carrier propio** con su prefijo de marcación, y cada campaña
+elige por cuál sale con su **prefijo** y su **Caller ID**. Ejemplo con voip.ms:
+
+| Subcuenta | Carrier | Prefijo de campaña | Plan de marcación de la app | Grupo de usuarios |
+|---|---|---|---|---|
+| 123456_empresa1 | `VOIPMS_EMPRESA1` → `_71NXXNXXXXXX` | 7 | `envoip-empresa1` | EMPRESA1 |
+| 123456_empresa2 | `VOIPMS_EMPRESA2` → `_81NXXNXXXXXX` | 8 | `envoip-empresa2` | EMPRESA2 |
+
+- En el carrier, la línea `register => usuario:clave@pop.voip.ms:5060/DID` termina en **/DID**: así voip.ms entrega
+  las entrantes con el número y Vicidial las enruta por su DID.
+- En voip.ms, cada DID → **Routing: SIP/IAX → la subcuenta** (no la cuenta principal: daría «ocupado») y el
+  mismo **POP** en el que se registra la subcuenta.
+- Un **grupo de usuarios** por empresa con `allowed_campaigns` = sus campañas: sus agentes solo ven esas campañas.
+- Para que los teléfonos de la app marquen directo con el número de su empresa: un contexto en
+  `extensions.conf` (`Set(CALLERID(num)=DID)` + `Dial(SIP/peer/${EXTEN})`) y una plantilla de teléfono copiada de
+  `VICIphoneSIP` con `context=` ese contexto.
+- **Cortafuegos:** el puerto SIP 5060/udp abierto solo a la IP del POP (`firewall-cmd --permanent --zone=public
+  --remove-service=asterisk` y una regla rica para la IP del POP). Con el 5060 cerrado al resto, la lista negra
+  VoIPBL de ViciBox ya no hace falta y conviene quitarla de cron: bloquea `firewalld` durante horas.
+
+### Calidad de audio
+
+- **Opus** (lo instala el script): tolera la pérdida de paquetes; con G.711/ulaw las redes wifi o domésticas
+  se oyen cortadas. Tras instalarlo hay que **reiniciar Asterisk** una vez (`asterisk -rx "core restart when convenient"`).
+- **Búfer de jitter adaptativo** (`jbforce=yes`, `jbimpl=adaptive` en `sip.conf`).
+- **App EnVoIP Phone 1.0.8 o superior**: ganancia automática del micrófono (voz baja) y, en Mac, el permiso de red
+  que necesita el audio UDP de WebRTC.
+- Los agentes conviene que usen cable o buena wifi y auriculares con micrófono.
 
 **SMS/MMS con clientes**: Administración → **Mensajería SMS** (API de VoIP.ms, DIDs con SMS y URL de
 aviso). Los detalles están en [PRODUCCION.md](PRODUCCION.md#6-mensajes-smsmms-con-clientes).
@@ -259,6 +307,13 @@ Asterisk y los procesos de Vicidial; hasta entonces los agentes pueden ver aviso
 |---|---|
 | La web `/modern/` da error 503 | El servicio no está en marcha: `systemctl restart vicimodern` y mira `journalctl -u vicimodern -n 50`. |
 | «Usuario o contraseña incorrectos» con datos correctos | El usuario está inactivo, o Vicidial tiene las contraseñas cifradas activadas (no admitido en 1.0). |
+| Cliente oye al agente muy bajo o entrecortado | Comprueba que `asterisk -rx "module show like codec_opus"` diga *Running* (si no, reinicia Asterisk una vez), que el teléfono muestre `Codecs: (opus\|ulaw)` en `sip show peer EXT`, y que el agente use la app 1.0.8+ o el navegador con buena conexión. |
+| Voz en un solo sentido con la app (Mac) | App anterior a 1.0.7: le faltaba el permiso de red para el audio UDP. Actualízala. |
+| El agente está «Disponible» y no le llegan llamadas automáticas | En `vicidial_live_agents` aparece como `CLOSER`: el agente está solo para entrantes. Los agentes deben tener «blended» (`closer_default_blended=1`, `agent_choose_ingroups=0`); EnVoip System lo pone al crearlos. Tras cambiarlo, el agente debe reconectarse. |
+| Se queda en «Cliente colgó» y no deja calificar | Versiones anteriores: vicidial.php esperaba el botón «Finish and Disposition Call». EnVoip System lo pulsa solo desde esta versión; recarga la página. |
+| El admin clásico muestra «COPYRIGHT TRADEMARK LICENSE» y no deja crear nada | Asistente de primer inicio pendiente. Ejecuta el script de instalación (paso 8d) en lugar del asistente: el asistente cambia la contraseña de todos los teléfonos. |
+| Leads cargados con zona horaria 0 | Faltan las tablas de prefijos: `cd /usr/share/astguiclient && ./ADMIN_area_code_populate.pl` y `./ADMIN_adjust_GMTnow_on_leads.pl --singlelistid=LISTA`. |
+| La app no registra la extensión detrás de Cloudflare | La app debe usar `wss://DOMINIO/ws` (443; 1.0.6+ por defecto). El 8089 no pasa por Cloudflare. |
 | El agente conecta pero no oye nada | Falta HTTPS válido o el WebSocket no llega a Asterisk: `curl -i --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' -H 'Sec-WebSocket-Protocol: sip' https://DOMINIO/ws` debe responder `101 Switching Protocols`. Si hay voz en un solo sentido, revisa que los puertos UDP 10000-20000 estén abiertos. |
 | «time synchronization problem» | Vicidial no está sincronizado con Asterisk: revisa la hora del servidor (`chronyc tracking`) y que los procesos de `screen -ls` estén vivos. Tras un reinicio, espera unos minutos. |
 | «No hay teléfonos disponibles» / teléfono no válido | El usuario no tiene «Teléfono por defecto» o la extensión no existe o está inactiva (Administración → Usuarios / Teléfonos). |
