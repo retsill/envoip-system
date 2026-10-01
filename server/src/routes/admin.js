@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
-import { all, one, saleStatuses } from '../db.js';
+import { all, db, one, saleStatuses } from '../db.js';
 import { nonAgentApi } from '../vici.js';
 import { assertCanManageLevel, loadPerms, requirePerm } from '../perms.js';
 import { ah, digits, HttpError, str } from '../util.js';
@@ -140,10 +140,12 @@ router.post(
     const message = await nonAgentApi('add_user', { agent_user: user, ...p });
     // Agentes: sin ventana de elegir colas (bloquearía la conexión automática) y en modo «blended»
     // (entrantes y salientes). Sin esto Vicidial los deja solo para entrantes y la marcación automática no les llama.
+    // La API de Vicidial no permite cambiar estas opciones: el usuario MySQL de la app tiene permiso de
+    // escritura SOLO sobre estas tres columnas (lo concede provision_vicibox.sh).
     if (Number(p.agent_user_level) < 7) {
-      await nonAgentApi('update_user', {
-        agent_user: user, agent_choose_ingroups: '0', agent_choose_blended: '0', closer_default_blended: '1',
-      }).catch(() => {});
+      await db
+        .query("UPDATE vicidial_users SET agent_choose_ingroups='0', agent_choose_blended='0', closer_default_blended='1' WHERE user = ?", [user])
+        .catch((e) => console.error('blended', e.message));
     }
     res.json({ ok: true, message });
   })
