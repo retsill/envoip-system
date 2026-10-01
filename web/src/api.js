@@ -35,6 +35,8 @@ export function usePoll(path, ms) {
   const [error, setError] = useState(null);
   const [fetchedAt, setFetchedAt] = useState(0);
   const busy = useRef(false);
+  const failures = useRef(0);
+  const hasData = useRef(false);
 
   const refresh = useCallback(async () => {
     if (busy.current) return;
@@ -43,8 +45,12 @@ export function usePoll(path, ms) {
       setData(await api(path));
       setFetchedAt(Date.now());
       setError(null);
+      failures.current = 0;
+      hasData.current = true;
     } catch (e) {
-      setError(e.message);
+      // Un fallo suelto (p. ej. el servicio reiniciándose un segundo) no se muestra si ya hay datos
+      failures.current += 1;
+      if (!hasData.current || failures.current >= 3) setError(e.message);
     } finally {
       busy.current = false;
     }
