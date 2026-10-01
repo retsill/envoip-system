@@ -260,6 +260,18 @@ q "UPDATE vicidial_users SET ${SET} modify_leads='1', user_level=9, api_only_use
 echo "apimodern: $(echo $COLS | wc -w) permisos"
 
 # -----------------------------------------------------------------------------
+step "8a. Audio de los teléfonos WebRTC detrás del proxy /ws"
+# Los teléfonos llegan a Asterisk a través de Apache (127.0.0.1). Sin externaddr, Asterisk les anuncia
+# 127.0.0.1 como dirección del audio y el teléfono no consigue enviar su voz (audio en un solo sentido).
+if [[ ! "$SERVER_IP" =~ ^(10\.|127\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.) ]] && ! grep -q '^externaddr=' /etc/asterisk/sip.conf; then
+  cp -p /etc/asterisk/sip.conf "/etc/asterisk/sip.conf.bak-$(date +%Y%m%d%H%M%S)"
+  sed -i "0,/^\[general\]/s//[general]\n; EnVoip System: IP pública que se anuncia en el audio\nexternaddr=$SERVER_IP/" /etc/asterisk/sip.conf
+  asterisk -rx "sip reload" >/dev/null
+fi
+grep -q "$(hostname)" /etc/hosts || echo "$SERVER_IP   $(hostname)" >> /etc/hosts
+grep '^externaddr=' /etc/asterisk/sip.conf || echo "IP privada: sin externaddr (configúralo con vicibox-externip si el servidor está detrás de NAT)"
+
+# -----------------------------------------------------------------------------
 step "8b. SMS entre extensiones (SIP MESSAGE) para EnVoIP Phone"
 # Acepta mensajes SIP autenticados y los entrega a la extensión de destino si existe en este servidor.
 # Los SMS a números externos se envían desde la app con la API de VoIP.ms.
