@@ -82,17 +82,43 @@ SSLProxyCheckPeerCN off
 SSLProxyCheckPeerName off
 SSLProxyCheckPeerExpire off
 <Location /ws>
-    ProxyPass wss://127.0.0.1:8089/ws
+    ProxyPass wss://127.0.0.1:8089/ws timeout=600 keepalive=On
     ProxyPassReverse wss://127.0.0.1:8089/ws
 </Location>
 CONF
 if [ "$WS_PORT" = "443" ]; then WS_URL="wss://$WS_HOST/ws"; else WS_URL="wss://$WS_HOST:$WS_PORT/ws"; fi
 q "UPDATE servers SET web_socket_url='$WS_URL' WHERE server_ip='$SERVER_IP'"
-# Sin 'context=default' los teléfonos WebRTC heredan 'trunkinbound' y sus llamadas internas
-# acaban en el DID por defecto («número fuera de servicio»).
+# Contexto propio para los webphones: igual que 'default' pero con una protección al entrar en la sala del agente.
+# ViciPhone vuelve a marcar la sala cada vez que se re-registra (dial_reg_exten); si su conexión se había cortado,
+# la llamada anterior se queda dentro y el agente aparece DOS veces: se oye a sí mismo, hay acople («pito») y
+# Vicidial no detecta que el cliente colgó. envoip-one-leg.sh cuelga las conexiones anteriores del mismo teléfono.
+cat > /usr/local/bin/envoip-one-leg.sh <<'SH'
+#!/bin/bash
+# EnVoip System: un teléfono solo puede estar una vez en la sala del agente. Uso: envoip-one-leg.sh PEER CANAL_QUE_SE_QUEDA
+peer="$1"; keep="$2"
+[ -n "$peer" ] && [ -n "$keep" ] || exit 0
+/usr/sbin/asterisk -rx "core show channels concise" | cut -d'!' -f1 | grep "^SIP/${peer}-" | grep -vxF "$keep" |
+  while read -r c; do /usr/sbin/asterisk -rx "channel request hangup $c" >/dev/null; logger -t envoip "colgada conexión duplicada $c"; done
+exit 0
+SH
+chmod 755 /usr/local/bin/envoip-one-leg.sh
+if ! grep -q '^\[envoip-phones\]' /etc/asterisk/extensions.conf; then
+  cat >> /etc/asterisk/extensions.conf <<'DIALPLAN'
+
+; ---- EnVoip System: teléfonos WebRTC (una sola conexión por teléfono en la sala del agente) ----
+[envoip-phones]
+exten => _8600XXX,1,System(/usr/local/bin/envoip-one-leg.sh ${CHANNEL(peername)} ${CHANNEL})
+ same => n,Goto(default,${EXTEN},1)
+include => default
+DIALPLAN
+  asterisk -rx "dialplan reload" >/dev/null
+fi
+# Sin contexto los teléfonos WebRTC heredan 'trunkinbound' y sus llamadas internas acaban en el DID por defecto
 q "UPDATE vicidial_conf_templates
-   SET template_contents = CONCAT(TRIM(TRAILING CHAR(10) FROM template_contents), CHAR(10), 'context=default', CHAR(10))
+   SET template_contents = CONCAT(TRIM(TRAILING CHAR(10) FROM template_contents), CHAR(10), 'context=envoip-phones', CHAR(10))
    WHERE template_id='VICIphoneSIP' AND template_contents NOT LIKE '%context=%'"
+q "UPDATE vicidial_conf_templates SET template_contents = REPLACE(template_contents, 'context=default', 'context=envoip-phones')
+   WHERE template_id='VICIphoneSIP'"
 # Comprobación cada 30 s: mantiene vivo el WebSocket (Cloudflare y otros proxies cierran conexiones inactivas)
 # y Vicidial sabe al momento si el teléfono está conectado.
 q "UPDATE vicidial_conf_templates

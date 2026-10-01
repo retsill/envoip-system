@@ -214,7 +214,8 @@ elige por cuál sale con su **prefijo** y su **Caller ID**. Ejemplo con voip.ms:
 - Un **grupo de usuarios** por empresa con `allowed_campaigns` = sus campañas: sus agentes solo ven esas campañas.
 - Para que los teléfonos de la app marquen directo con el número de su empresa: un contexto en
   `extensions.conf` (`Set(CALLERID(num)=DID)` + `Dial(SIP/peer/${EXTEN})`) y una plantilla de teléfono copiada de
-  `VICIphoneSIP` con `context=` ese contexto.
+  `VICIphoneSIP` con `context=` ese contexto. Copia también al principio del contexto la protección de la sala
+  (`exten => _8600XXX` con `envoip-one-leg.sh`, como en `[envoip-phones]`) e `include => default`.
 - **Cortafuegos:** el puerto SIP 5060/udp abierto solo a la IP del POP (`firewall-cmd --permanent --zone=public
   --remove-service=asterisk` y una regla rica para la IP del POP). Con el 5060 cerrado al resto, la lista negra
   VoIPBL de ViciBox ya no hace falta y conviene quitarla de cron: bloquea `firewalld` durante horas.
@@ -308,6 +309,7 @@ Asterisk y los procesos de Vicidial; hasta entonces los agentes pueden ver aviso
 |---|---|
 | La web `/modern/` da error 503 | El servicio no está en marcha: `systemctl restart vicimodern` y mira `journalctl -u vicimodern -n 50`. |
 | «Usuario o contraseña incorrectos» con datos correctos | El usuario está inactivo, o Vicidial tiene las contraseñas cifradas activadas (no admitido en 1.0). |
+| El agente se oye a sí mismo estando en pausa, se escucha un «pito» (acople) o al colgar el cliente no deja calificar | El webphone está dos veces en la sala del agente (se re-registró y ViciPhone volvió a marcar la sala). `asterisk -rx "meetme list SALA concise"` muestra el mismo teléfono dos veces. La protección `envoip-one-leg.sh` del contexto `envoip-phones` cuelga la conexión anterior; revisa que la plantilla del teléfono use ese contexto (o uno que la incluya). |
 | El cliente oye la voz del agente repetida y cada vez más baja («Hola, Hola, Hola») | Relleno genérico de pérdidas de Asterisk: `genericplc => false` en `codecs.conf`, `jbforce = no` en `sip.conf` y `asterisk -rx "core reload"`. |
 | El agente no puede marcar a mano («not allowed to place manual dial calls») | Permiso «Agent Call Manual» del usuario: `agentcall_manual=1`. EnVoip System lo activa al crear agentes. |
 | Cliente oye al agente muy bajo o entrecortado | Comprueba que `asterisk -rx "module show like codec_opus"` diga *Running* (si no, reinicia Asterisk una vez), que el teléfono muestre `Codecs: (opus\|ulaw)` en `sip show peer EXT`, y que el agente use la app 1.0.8+ o el navegador con buena conexión. |
