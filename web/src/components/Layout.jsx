@@ -172,10 +172,26 @@ export default function Layout() {
     },
   };
 
+  const [leaving, setLeaving] = useState(false);
   const fullLogout = async () => {
-    // Cierra también la sesión de agente en Vicidial para que no quede colgada
-    if (classic.mounted) await post('/agent/logout').catch(() => {});
+    setLeaving(true);
+    // Cierra también la sesión de agente en Vicidial (y cuelga su teléfono en la sala).
+    // La API solo «pide» el cierre: lo ejecuta la pantalla clásica oculta, así que se mantiene montada
+    // hasta que Vicidial confirma que el agente ya no está conectado.
+    const st = await api('/agent/state').catch(() => null);
+    if (st?.loggedIn) {
+      await post('/agent/logout').catch(() => {});
+      if (classic.mounted) {
+        for (let i = 0; i < 30; i++) {
+          await new Promise((r) => setTimeout(r, 500));
+          const s = await api('/agent/state').catch(() => null);
+          if (!s?.loggedIn) break;
+        }
+      }
+    }
+    ctx.unmount();
     clearAgentPass();
+    setLeaving(false);
     logout();
   };
 
@@ -229,7 +245,7 @@ export default function Layout() {
                 <div className="me-sub">{user.user} · {t('nivel {level}', { level: user.level })}</div>
               </div>
             </div>
-            <button className="side-link" onClick={fullLogout}>{t('Salir')}</button>
+            <button className="side-link" onClick={fullLogout} disabled={leaving}>{leaving ? t('Cerrando la sesión…') : t('Salir')}</button>
           </div>
         </aside>
         <main className="main">

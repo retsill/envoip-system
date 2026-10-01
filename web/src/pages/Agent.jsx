@@ -119,8 +119,9 @@ function Connect({ stats }) {
 
   useEffect(() => {
     if (!opts || campaign) return;
-    const last = lastCampaign();
-    setCampaign(opts.campaigns.some((c) => c.campaign_id === last) ? last : opts.campaigns[0]?.campaign_id || '');
+    // Cada inicio de sesión el agente elige la campaña (no se preselecciona la anterior),
+    // salvo que solo tenga una disponible.
+    if (opts.campaigns.length === 1) setCampaign(opts.campaigns[0].campaign_id);
   }, [opts, campaign]);
 
   useEffect(() => {
@@ -189,6 +190,7 @@ function Connect({ stats }) {
             <form className="stack" onSubmit={connect}>
               <Field label={t('Campaña')}>
                 <select value={campaign} onChange={(e) => setCampaign(e.target.value)} disabled={!opts || noCampaigns}>
+                  {(opts?.campaigns?.length || 0) > 1 && <option value="">{t('Elige la campaña…')}</option>}
                   {(opts?.campaigns || []).map((c) => <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_id} · {c.campaign_name}</option>)}
                 </select>
               </Field>

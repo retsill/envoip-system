@@ -668,5 +668,7 @@
   "La lista tiene {n} leads. ¿Qué quieres borrar? No se puede deshacer.": "The list has {n} leads. What do you want to delete? This can't be undone.",
   "Solo la lista": "Only the list",
   "La lista y sus leads": "The list and its leads",
-  "Quitar de la lista negra": "Remove from do-not-call list"
+  "Quitar de la lista negra": "Remove from do-not-call list",
+  "Cerrando la sesión…": "Signing out…",
+  "Elige la campaña…": "Choose the campaign…"
 }
