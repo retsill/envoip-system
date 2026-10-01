@@ -6,7 +6,8 @@ import { useT } from '../../i18n.js';
 import { useConfirm } from '../../components/Modal.jsx';
 
 
-const isWebrtc = (p) => /webrtc|viciphone/i.test(p.template_id || '');
+// Lo calcula el servidor mirando si la plantilla usa WebSocket seguro (sirve para plantillas con cualquier nombre)
+const isWebrtc = (p) => Boolean(p.webrtc);
 
 export default function Phones() {
   const t = useT();

@@ -46,7 +46,9 @@ router.get(
                   IFNULL(s.dialable_leads, 0) dialable
            FROM vicidial_campaigns c LEFT JOIN vicidial_campaign_stats s USING (campaign_id)
            WHERE c.active = 'Y'`),
-      all("SELECT extension FROM phones WHERE active='Y' AND is_webphone IN ('Y','Y_API_LAUNCH') AND (template_id IS NULL OR template_id = '' OR template_id NOT LIKE '%WebRTC%' AND template_id NOT LIKE 'VICIphone%')"),
+      // Webphone sin WebRTC: su plantilla no usa WebSocket seguro (se mira el contenido, no el nombre)
+      all(`SELECT p.extension FROM phones p LEFT JOIN vicidial_conf_templates t ON t.template_id = p.template_id
+           WHERE p.active='Y' AND p.is_webphone IN ('Y','Y_API_LAUNCH') AND IFNULL(t.template_contents,'') NOT LIKE '%transport=%wss%'`),
       all("SELECT user, full_name, failed_login_count FROM vicidial_users WHERE failed_login_count >= 5 AND active='Y'"),
       one('SELECT COUNT(*) total FROM vicidial_list'),
     ]);
@@ -203,11 +205,13 @@ router.get(
     const rows = await all(`
       SELECT p.extension, p.login, p.fullname, p.protocol, p.server_ip, p.active, p.is_webphone, p.template_id,
              p.status, p.local_gmt, la.user logged_user,
-             (SELECT GROUP_CONCAT(u.user) FROM vicidial_users u WHERE u.phone_login = p.login) assigned_users
+             (SELECT GROUP_CONCAT(u.user) FROM vicidial_users u WHERE u.phone_login = p.login) assigned_users,
+             IFNULL(t.template_contents,'') LIKE '%transport=%wss%' AS webrtc
       FROM phones p
       LEFT JOIN vicidial_live_agents la ON la.extension = CONCAT(p.protocol, '/', p.extension)
+      LEFT JOIN vicidial_conf_templates t ON t.template_id = p.template_id
       ORDER BY p.extension`);
-    res.json(rows);
+    res.json(rows.map((r) => ({ ...r, webrtc: Boolean(Number(r.webrtc)) })));
   })
 );
 
@@ -267,14 +271,19 @@ router.get(
   '/phones/:ext/connect',
   requirePerm('ast_admin_access'),
   ah(async (req, res) => {
-    const ph = await one('SELECT extension, login, conf_secret, is_webphone, template_id FROM phones WHERE extension = ?', [req.params.ext]);
+    const ph = await one(
+      `SELECT p.extension, p.login, p.conf_secret, p.is_webphone, p.template_id,
+              IFNULL(t.template_contents,'') LIKE '%transport=%wss%' AS wss
+       FROM phones p LEFT JOIN vicidial_conf_templates t ON t.template_id = p.template_id WHERE p.extension = ?`,
+      [req.params.ext]
+    );
     if (!ph) throw new HttpError(404, 'Teléfono no encontrado');
     const app = await one("SELECT extension FROM phones WHERE login = ? AND active = 'Y'", [appPhoneLogin(ph.login)]);
     res.json({
       server: (req.get('x-forwarded-host') || req.hostname).split(',')[0].trim().replace(/:443$/, ''),
       extension: ph.extension,
       password: ph.conf_secret,
-      webrtc: /webrtc|viciphone/i.test(ph.template_id || ''),
+      webrtc: Boolean(Number(ph.wss)),
       webphone: ph.is_webphone !== 'N',
       app_extension: app?.extension || null,
     });
