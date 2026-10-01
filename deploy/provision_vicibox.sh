@@ -384,6 +384,19 @@ fi
 grep -E '^genericplc' /etc/asterisk/codecs.conf
 
 # -----------------------------------------------------------------------------
+step "8e. Mensajes de espera y música para las colas de entrada"
+# envoip_espera_es: «todos nuestros agentes están ocupados… permanezca en la línea o vuelva a llamar más tarde»
+# envoip_buzon_es: saludo de buzón de voz. Úsalos en cada cola (In-Group): welcome_message_filename y
+# onhold_prompt_filename = envoip_espera_es, play_welcome_message = IF_WAIT_ONLY, moh_context = envoip.
+install -o asterisk -g asterisk -m 644 "$APP"/deploy/sounds/envoip_*.wav /var/lib/asterisk/sounds/ 2>/dev/null || true
+# La clase «default» de ViciBox apunta a una carpeta con solo silencio: clase «envoip» con la música libre de ViciBox
+if [ -d /var/lib/asterisk/moh ] && ! grep -q '^\[envoip\]' /etc/asterisk/musiconhold.conf; then
+  printf '\n; EnVoip System: música de espera de las colas de entrada\n[envoip]\nmode=files\ndirectory=/var/lib/asterisk/moh\nsort=random\n' >> /etc/asterisk/musiconhold.conf
+  asterisk -rx "moh reload" >/dev/null
+fi
+asterisk -rx "moh show classes" | grep -A2 "Class: envoip" | head -3
+
+# -----------------------------------------------------------------------------
 step "9. Regenerar configuración de Asterisk"
 q "UPDATE servers SET rebuild_conf_files='Y' WHERE server_ip='$SERVER_IP'"
 for i in $(seq 1 45); do

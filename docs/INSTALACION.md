@@ -220,6 +220,21 @@ elige por cuál sale con su **prefijo** y su **Caller ID**. Ejemplo con voip.ms:
   --remove-service=asterisk` y una regla rica para la IP del POP). Con el 5060 cerrado al resto, la lista negra
   VoIPBL de ViciBox ya no hace falta y conviene quitarla de cron: bloquea `firewalld` durante horas.
 
+### Llamadas entrantes: cola por empresa, mensaje de espera y buzón
+
+Los números deben ir a una **cola de Vicidial (In-Group)**, no a un teléfono: así el cliente que devuelve la llamada
+llega al primer agente libre con su ficha, o espera en la cola si todos están ocupados.
+
+1. Crea una cola por empresa (copia de `SOPORTE`) con `moh_context = envoip`, `welcome_message_filename` y
+   `onhold_prompt_filename = envoip_espera_es`, `play_welcome_message = IF_WAIT_ONLY`, `prompt_interval = 60`,
+   `drop_call_seconds = 120` y `drop_action = VOICEMAIL` a un buzón de la empresa (saludo `envoip_buzon_es`),
+   horario (`call_time_id`) con `after_hours_action = VOICEMAIL` y `queue_priority` mayor que el de las campañas.
+2. Cada DID → **Cola de agentes** con `CIDLOOKUPRC` (busca al cliente en las listas de la campaña) y una lista para
+   clientes nuevos.
+3. Añade la cola a la campaña (`closer_campaigns`) y a los agentes, y activa `inbound_queue_no_dial` para que el
+   marcador no lance llamadas mientras haya clientes esperando.
+4. Los buzones se escuchan marcando **8500** desde cualquier teléfono (número de buzón y su clave).
+
 ### Calidad de audio
 
 - **Opus** (lo instala el script): tolera la pérdida de paquetes; con G.711/ulaw las redes wifi o domésticas
