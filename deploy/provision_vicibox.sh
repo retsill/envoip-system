@@ -16,6 +16,9 @@
 #     INGROUP        Cola de entrada para los agentes (por defecto SOPORTE).
 #     INGROUP_EXT    Extensión interna que llama a esa cola (por defecto 7000).
 #     SKIP_APP=1     No compilar ni desplegar la app web.
+#     WS_HOST        Nombre para el WebSocket SIP de webphones y app (por defecto PUBLIC_HOST). Con la web detrás
+#                    de Cloudflare conviene un subdominio SIN proxy (nube gris), p. ej. sip.tudominio.com:
+#                    las conexiones de señalización largas van más estables directas al servidor.
 #     WS_PORT        Puerto del WebSocket SIP para webphones y app: 443 (por defecto, vía Apache en /ws;
 #                    funciona detrás de Cloudflare) u 8089 (directo a Asterisk).
 # =============================================================================
@@ -28,6 +31,7 @@ PUBLIC_HOST=${PUBLIC_HOST:-$SERVER_IP}
 INGROUP=${INGROUP:-SOPORTE}
 INGROUP_EXT=${INGROUP_EXT:-7000}
 WS_PORT=${WS_PORT:-443}
+WS_HOST=${WS_HOST:-$PUBLIC_HOST}
 M="mysql --default-character-set=utf8mb4 asterisk"
 step() { printf '\n\033[1;34m== %s\033[0m\n' "$*"; }
 q() { $M -N -e "$1"; }
@@ -82,7 +86,7 @@ SSLProxyCheckPeerExpire off
     ProxyPassReverse wss://127.0.0.1:8089/ws
 </Location>
 CONF
-if [ "$WS_PORT" = "443" ]; then WS_URL="wss://$PUBLIC_HOST/ws"; else WS_URL="wss://$PUBLIC_HOST:$WS_PORT/ws"; fi
+if [ "$WS_PORT" = "443" ]; then WS_URL="wss://$WS_HOST/ws"; else WS_URL="wss://$WS_HOST:$WS_PORT/ws"; fi
 q "UPDATE servers SET web_socket_url='$WS_URL' WHERE server_ip='$SERVER_IP'"
 # Sin 'context=default' los teléfonos WebRTC heredan 'trunkinbound' y sus llamadas internas
 # acaban en el DID por defecto («número fuera de servicio»).

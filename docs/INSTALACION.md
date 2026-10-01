@@ -30,7 +30,7 @@ Tiempo aproximado: 20–30 minutos (sin contar la instalación de ViciBox).
 | **Dominio** | Por ejemplo `pbx.tuempresa.com`, apuntando a la IP del servidor. En un laboratorio vale la IP. |
 | **Certificado SSL válido** | Obligatorio para el audio del navegador (WebRTC): los navegadores no permiten el micrófono sin HTTPS. Let's Encrypt sirve (ver el apartado 3). |
 | **Puertos abiertos** | `80/tcp` y `443/tcp` (web y WebSocket SIP de webphones y app en `wss://DOMINIO/ws`), `10000-20000/udp` (audio RTP), `5060/udp` solo hacia tu proveedor SIP, `22/tcp` solo desde tu IP. |
-| **Cloudflare (opcional)** | Se puede poner el dominio detrás del proxy de Cloudflare (nube naranja) para no publicar la IP: la web y el WebSocket SIP pasan por el 443. Modo SSL **Full (strict)** con un certificado válido en el servidor. El audio (RTP) y el proveedor SIP van siempre directos a la IP. |
+| **Cloudflare (opcional)** | Se puede poner la web detrás del proxy de Cloudflare (nube naranja) para no publicar la IP, con modo SSL **Full (strict)** y certificado válido en el servidor. Para la **señalización de los teléfonos** usa un subdominio **sin proxy** (nube gris), p. ej. `sip.tudominio.com` → IP del servidor, e instala con `WS_HOST=sip.tudominio.com`: a través de Cloudflare las conexiones WebSocket largas se cortan de vez en cuando (llamadas que no salen o se cortan). El audio (RTP) y el proveedor SIP van siempre directos a la IP. El certificado debe incluir los dos nombres. |
 
 ### Vicidial
 
@@ -140,7 +140,7 @@ las contraseñas ya generadas. Hace esto:
 Al terminar debe mostrar `{"ok":true}  <- servicio OK`.
 
 > Variables opcionales: `INGROUP` (nombre de la cola, por defecto `SOPORTE`), `INGROUP_EXT`
-> (extensión de la cola, por defecto `7000`), `WS_PORT` (`443` por defecto u `8089`) y `SKIP_APP=1` (no compilar la web).
+> (extensión de la cola, por defecto `7000`), `WS_HOST` (nombre para el WebSocket SIP; ver Cloudflare en Requisitos), `WS_PORT` (`443` por defecto u `8089`) y `SKIP_APP=1` (no compilar la web).
 
 ---
 
@@ -316,7 +316,8 @@ Asterisk y los procesos de Vicidial; hasta entonces los agentes pueden ver aviso
 | Se queda en «Cliente colgó» y no deja calificar | Versiones anteriores: vicidial.php esperaba el botón «Finish and Disposition Call». EnVoip System lo pulsa solo desde esta versión; recarga la página. |
 | El admin clásico muestra «COPYRIGHT TRADEMARK LICENSE» y no deja crear nada | Asistente de primer inicio pendiente. Ejecuta el script de instalación (paso 8d) en lugar del asistente: el asistente cambia la contraseña de todos los teléfonos. |
 | Leads cargados con zona horaria 0 | Faltan las tablas de prefijos: `cd /usr/share/astguiclient && ./ADMIN_area_code_populate.pl` y `./ADMIN_adjust_GMTnow_on_leads.pl --singlelistid=LISTA`. |
-| La app no registra la extensión detrás de Cloudflare | La app debe usar `wss://DOMINIO/ws` (443; 1.0.6+ por defecto). El 8089 no pasa por Cloudflare. |
+| La app no registra la extensión detrás de Cloudflare | La app debe usar `wss://DOMINIO/ws` (443; 1.0.6+ por defecto). El 8089 no pasa por Cloudflare. Mejor aún: en la línea pon como servidor el subdominio sin proxy (`sip.tudominio.com`). |
+| Teléfonos que se desconectan cada poco («UNREACHABLE» en el registro), llamadas que no salen o se cortan | Señalización a través de Cloudflare o red inestable (datos móviles). Usa el subdominio sin proxy para el WebSocket y una conexión estable (wifi o cable). |
 | El agente conecta pero no oye nada | Falta HTTPS válido o el WebSocket no llega a Asterisk: `curl -i --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' -H 'Sec-WebSocket-Protocol: sip' https://DOMINIO/ws` debe responder `101 Switching Protocols`. Si hay voz en un solo sentido, revisa que los puertos UDP 10000-20000 estén abiertos. |
 | «time synchronization problem» | Vicidial no está sincronizado con Asterisk: revisa la hora del servidor (`chronyc tracking`) y que los procesos de `screen -ls` estén vivos. Tras un reinicio, espera unos minutos. |
 | «No hay teléfonos disponibles» / teléfono no válido | El usuario no tiene «Teléfono por defecto» o la extensión no existe o está inactiva (Administración → Usuarios / Teléfonos). |
