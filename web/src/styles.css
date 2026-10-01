@@ -97,7 +97,7 @@ h2 { font-size: 15px; margin: 0; font-weight: 600; }
 /* ---------- Tarjetas ---------- */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-.card-actions { display: flex; gap: 8px; align-items: center; }
+.card-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; min-width: 0; max-width: 100%; }
 .card-body { padding: 16px 18px; }
 .card-note { padding: 10px 18px; border-top: 1px solid var(--border); font-size: 13px; color: var(--text-2); background: var(--surface-2); border-radius: 0 0 var(--radius) var(--radius); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
@@ -521,12 +521,12 @@ td.row-actions { white-space: nowrap; }
   }
   .sidebar.open { transform: none; opacity: 1; visibility: visible; transition: transform 0.42s cubic-bezier(0.22, 0.8, 0.22, 1), opacity 0.32s ease; }
   .menu-close {
-    display: grid; place-items: center; position: absolute; top: calc(18px + env(safe-area-inset-top)); right: 18px;
+    display: grid; place-items: center; position: absolute; z-index: 10; top: calc(18px + env(safe-area-inset-top)); right: 18px;
     width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.1); color: #fff; cursor: pointer;
     transition: background 0.2s, transform 0.3s;
   }
   .menu-close:hover { background: rgba(255, 255, 255, 0.18); transform: rotate(90deg); }
-  .sidebar .brand { padding: 2px 4px 26px; }
+  .sidebar .brand { padding: 2px 64px 26px 4px; }
   .sidebar .nav { gap: 4px; }
   .sidebar .nav a { font-size: 17px; padding: 12px 14px; border-radius: 12px; }
   .sidebar .nav a.active { background: rgba(95, 176, 238, 0.16); }
@@ -571,4 +571,17 @@ td.row-actions { white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) {
   .sidebar, .sidebar.open { transition: none; }
   .sidebar.open .menu-item { animation: none; }
+}
+
+/* Móvil: ninguna página más ancha que la pantalla, y chat/mensajes con alto propio para poder desplazarse */
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .main { min-width: 0; max-width: 100vw; overflow-x: clip; }
+  .page-head > div:first-child { min-width: 0; }
+  .card-head h2 { min-width: 0; }
+  .card-actions .segmented { max-width: 100%; }
+  .page-fill { height: auto; }
+  .inbox-list { max-height: 38dvh; }
+  .inbox-list .conv-list { overflow-y: auto; }
+  .inbox-thread { height: 72dvh; }
 }

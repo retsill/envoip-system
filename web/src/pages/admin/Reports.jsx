@@ -129,6 +129,7 @@ export default function Reports() {
             )}
           >
             {data.dispos.length === 0 ? <Empty icon="📞" title={t('No hay llamadas en este periodo')} /> : (
+              <div className="table-wrap">
               <table className="table">
                 <thead><tr><th>{t('Estado')}</th><th>{t('Descripción')}</th><th className="num">{t('Llamadas')}</th><th className="num">%</th><th style={{ width: '35%' }} /></tr></thead>
                 <tbody>
@@ -143,6 +144,7 @@ export default function Reports() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </Card>
         </>
