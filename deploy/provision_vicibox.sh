@@ -66,13 +66,20 @@ q "UPDATE system_settings SET webphone_url='/viciphone/viciphone.php'"
 
 # -----------------------------------------------------------------------------
 step "2. WebRTC: URL WebSocket y plantilla de teléfonos"
-# WebSocket SIP de Asterisk también por HTTPS 443 (Apache /ws → Asterisk 8088). Así webphones y app usan
-# el mismo puerto que la web, y funciona detrás de Cloudflare (que no deja pasar el 8089).
+# WebSocket SIP de Asterisk también por HTTPS 443 (Apache /ws → Asterisk WSS 8089 dentro del servidor).
+# Así webphones y app usan el mismo puerto que la web, y funciona detrás de Cloudflare (que no deja pasar el 8089).
+# Se reenvía cifrado (WSS, no WS): Asterisk debe ver el mismo transporte que anuncia el teléfono para poder
+# enviarle llamadas y comprobaciones (qualify).
 cat > /etc/apache2/conf.d/envoip-ws.conf <<'CONF'
 # EnVoip System: WebSocket SIP de Asterisk (webphones y app EnVoIP Phone) por HTTPS 443.
+SSLProxyEngine on
+SSLProxyVerify none
+SSLProxyCheckPeerCN off
+SSLProxyCheckPeerName off
+SSLProxyCheckPeerExpire off
 <Location /ws>
-    ProxyPass ws://127.0.0.1:8088/ws
-    ProxyPassReverse ws://127.0.0.1:8088/ws
+    ProxyPass wss://127.0.0.1:8089/ws
+    ProxyPassReverse wss://127.0.0.1:8089/ws
 </Location>
 CONF
 if [ "$WS_PORT" = "443" ]; then WS_URL="wss://$PUBLIC_HOST/ws"; else WS_URL="wss://$PUBLIC_HOST:$WS_PORT/ws"; fi
@@ -82,6 +89,12 @@ q "UPDATE servers SET web_socket_url='$WS_URL' WHERE server_ip='$SERVER_IP'"
 q "UPDATE vicidial_conf_templates
    SET template_contents = CONCAT(TRIM(TRAILING CHAR(10) FROM template_contents), CHAR(10), 'context=default', CHAR(10))
    WHERE template_id='VICIphoneSIP' AND template_contents NOT LIKE '%context=%'"
+# Comprobación cada 30 s: mantiene vivo el WebSocket (Cloudflare y otros proxies cierran conexiones inactivas)
+# y Vicidial sabe al momento si el teléfono está conectado.
+q "UPDATE vicidial_conf_templates
+   SET template_contents = CONCAT(TRIM(TRAILING CHAR(10) FROM TRIM(TRAILING CHAR(13) FROM TRIM(TRAILING CHAR(10) FROM template_contents))),
+                                  CHAR(10), 'qualify=yes', CHAR(10), 'qualifyfreq=30', CHAR(10))
+   WHERE template_id='VICIphoneSIP' AND template_contents NOT LIKE '%qualify%'"
 q "SELECT CONCAT('web_socket_url = ', web_socket_url) FROM servers WHERE server_ip='$SERVER_IP'"
 
 # -----------------------------------------------------------------------------
