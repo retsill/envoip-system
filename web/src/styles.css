@@ -281,12 +281,6 @@ textarea { resize: vertical; width: 100%; }
   .grid-2, .grid-2-wide, .agent-grid, .connect { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
-  .shell { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; }
-  .brand { padding: 0; }
-  .nav { flex-direction: row; }
-  .sidebar-foot { margin: 0 0 0 auto; flex-direction: row; }
-  .sidebar-foot .me { display: none; }
   .page { padding: 16px; }
   .agentbar-actions { margin-left: 0; }
 }
@@ -501,3 +495,80 @@ td.row-actions { white-space: nowrap; }
 .modal-foot .btn { min-width: 110px; }
 .modal-danger .modal-title { color: var(--red-text, #dc2626); }
 @keyframes modal-in { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
+
+/* ---------- Menú en móvil: panel a pantalla completa, translúcido, entrada escalonada ---------- */
+.mobilebar, .menu-close { display: none; }
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr; }
+  .mobilebar {
+    display: flex; position: sticky; top: 0; z-index: 60; align-items: center; justify-content: space-between;
+    padding: 10px 16px; padding-top: calc(10px + env(safe-area-inset-top));
+    background: rgba(13, 18, 30, 0.88); backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  .menu-btn {
+    position: relative; width: 42px; height: 42px; display: grid; place-items: center; border: 0; border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08); color: #fff; cursor: pointer; transition: background 0.2s;
+  }
+  .menu-btn:active { background: rgba(255, 255, 255, 0.16); }
+  .menu-dot { position: absolute; top: 9px; right: 9px; width: 9px; height: 9px; border-radius: 50%; background: #f04438; box-shadow: 0 0 0 2px rgba(13, 18, 30, 0.9); }
+  .sidebar {
+    position: fixed; inset: 0; z-index: 100; width: 100%; height: 100dvh; overflow-y: auto; overscroll-behavior: contain;
+    padding: calc(24px + env(safe-area-inset-top)) 24px calc(24px + env(safe-area-inset-bottom));
+    background: rgba(9, 13, 22, 0.74); backdrop-filter: blur(24px) saturate(150%); -webkit-backdrop-filter: blur(24px) saturate(150%);
+    transform: translateX(-100%); opacity: 0; visibility: hidden;
+    transition: transform 0.42s cubic-bezier(0.22, 0.8, 0.22, 1), opacity 0.32s ease, visibility 0s linear 0.42s;
+  }
+  .sidebar.open { transform: none; opacity: 1; visibility: visible; transition: transform 0.42s cubic-bezier(0.22, 0.8, 0.22, 1), opacity 0.32s ease; }
+  .menu-close {
+    display: grid; place-items: center; position: absolute; top: calc(18px + env(safe-area-inset-top)); right: 18px;
+    width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.1); color: #fff; cursor: pointer;
+    transition: background 0.2s, transform 0.3s;
+  }
+  .menu-close:hover { background: rgba(255, 255, 255, 0.18); transform: rotate(90deg); }
+  .sidebar .brand { padding: 2px 4px 26px; }
+  .sidebar .nav { gap: 4px; }
+  .sidebar .nav a { font-size: 17px; padding: 12px 14px; border-radius: 12px; }
+  .sidebar .nav a.active { background: rgba(95, 176, 238, 0.16); }
+  .sidebar .nav-section { padding: 20px 14px 8px; }
+  .sidebar-foot { margin-top: 28px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+  .sidebar-foot .side-link { font-size: 15px; padding: 10px 14px; }
+  .sidebar.open .menu-item { animation: menu-item-in 0.46s cubic-bezier(0.22, 0.8, 0.22, 1) both; }
+  .sidebar.open .menu-item:nth-child(1) { animation-delay: 0.080s; }
+  .sidebar.open .menu-item:nth-child(2) { animation-delay: 0.115s; }
+  .sidebar.open .menu-item:nth-child(3) { animation-delay: 0.150s; }
+  .sidebar.open .menu-item:nth-child(4) { animation-delay: 0.185s; }
+  .sidebar.open .menu-item:nth-child(5) { animation-delay: 0.220s; }
+  .sidebar.open .menu-item:nth-child(6) { animation-delay: 0.255s; }
+  .sidebar.open .menu-item:nth-child(7) { animation-delay: 0.290s; }
+  .sidebar.open .menu-item:nth-child(8) { animation-delay: 0.325s; }
+  .sidebar.open .menu-item:nth-child(9) { animation-delay: 0.360s; }
+  .sidebar.open .menu-item:nth-child(10) { animation-delay: 0.395s; }
+  .sidebar.open .menu-item:nth-child(11) { animation-delay: 0.430s; }
+  .sidebar.open .menu-item:nth-child(12) { animation-delay: 0.465s; }
+  .sidebar.open .menu-item:nth-child(13) { animation-delay: 0.500s; }
+  .sidebar.open .menu-item:nth-child(14) { animation-delay: 0.535s; }
+  .sidebar.open .menu-item:nth-child(15) { animation-delay: 0.570s; }
+  .sidebar.open .menu-item:nth-child(16) { animation-delay: 0.605s; }
+  .sidebar.open .menu-item:nth-child(17) { animation-delay: 0.640s; }
+  .sidebar.open .menu-item:nth-child(18) { animation-delay: 0.675s; }
+  .sidebar.open .menu-item:nth-child(19) { animation-delay: 0.710s; }
+  .sidebar.open .menu-item:nth-child(20) { animation-delay: 0.745s; }
+  .sidebar.open .menu-item:nth-child(21) { animation-delay: 0.780s; }
+  .sidebar.open .menu-item:nth-child(22) { animation-delay: 0.815s; }
+  .sidebar.open .menu-item:nth-child(23) { animation-delay: 0.850s; }
+  .sidebar.open .menu-item:nth-child(24) { animation-delay: 0.885s; }
+  .sidebar.open .menu-item:nth-child(25) { animation-delay: 0.920s; }
+  .sidebar.open .sidebar-foot .menu-item:nth-child(1) { animation-delay: 0.50s; }
+  .sidebar.open .sidebar-foot .menu-item:nth-child(2) { animation-delay: 0.54s; }
+  .sidebar.open .sidebar-foot .menu-item:nth-child(3) { animation-delay: 0.58s; }
+  .sidebar.open .sidebar-foot .menu-item:nth-child(4) { animation-delay: 0.62s; }
+  .sidebar.open .sidebar-foot .menu-item:nth-child(5) { animation-delay: 0.66s; }
+  .sidebar.open .sidebar-foot .menu-item:nth-child(6) { animation-delay: 0.70s; }
+  body.menu-open { overflow: hidden; }
+}
+@keyframes menu-item-in { from { opacity: 0; transform: translateX(-22px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .sidebar, .sidebar.open { transition: none; }
+  .sidebar.open .menu-item { animation: none; }
+}

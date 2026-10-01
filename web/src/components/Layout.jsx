@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { api, post, usePoll } from '../api.js';
 import { useAuth } from '../App.jsx';
 import { clearAgentPass } from '../session.js';
@@ -173,6 +173,20 @@ export default function Layout() {
   };
 
   const [leaving, setLeaving] = useState(false);
+  // Menú en móvil: panel a pantalla completa que se cierra al navegar, con ✕ o con Esc
+  const [menuOpen, setMenuOpen] = useState(false);
+  const location = useLocation();
+  useEffect(() => setMenuOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKey = (e) => e.key === 'Escape' && setMenuOpen(false);
+    window.addEventListener('keydown', onKey);
+    document.body.classList.add('menu-open');
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.classList.remove('menu-open');
+    };
+  }, [menuOpen]);
   const fullLogout = async () => {
     setLeaving(true);
     // Cierra también la sesión de agente en Vicidial (y cuelga su teléfono en la sala).
@@ -198,54 +212,64 @@ export default function Layout() {
   return (
     <ClassicCtx.Provider value={ctx}>
       <div className="shell">
-        <aside className="sidebar">
-          <div className="brand">
+        <header className="mobilebar">
+          <Logo variant="onDark" height={32} />
+          <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label={t('Abrir menú')} aria-expanded={menuOpen}>
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            {(unread > 0 || chatUnread > 0) && <span className="menu-dot" />}
+          </button>
+        </header>
+        <aside className={`sidebar${menuOpen ? ' open' : ''}`} aria-hidden={undefined}>
+          <button className="menu-close" onClick={() => setMenuOpen(false)} aria-label={t('Cerrar menú')}>
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" /></svg>
+          </button>
+          <div className="brand menu-item">
             <Logo variant="onDark" height={40} />
           </div>
           <nav className="nav">
-            {isSup && <NavLink to="/supervisor"><span aria-hidden>◉</span> {t('Supervisión')}</NavLink>}
-            <NavLink to="/agente"><span aria-hidden>🎧</span> {t('Agente')}</NavLink>
-            <NavLink to="/mensajes">
+            {isSup && <NavLink className="menu-item" to="/supervisor"><span aria-hidden>◉</span> {t('Supervisión')}</NavLink>}
+            <NavLink className="menu-item" to="/agente"><span aria-hidden>🎧</span> {t('Agente')}</NavLink>
+            <NavLink className="menu-item" to="/mensajes">
               <span aria-hidden>💬</span> {t('Mensajes')} {unread > 0 && <span className="nav-badge">{unread > 99 ? '99+' : unread}</span>}
             </NavLink>
-            <NavLink to="/chat">
+            <NavLink className="menu-item" to="/chat">
               <span aria-hidden>🗨️</span> {t('Chat interno')} {chatUnread > 0 && <span className="nav-badge nav-badge-alert">{chatUnread}</span>}
             </NavLink>
-            {isSup && <NavLink to="/leads"><span aria-hidden>☰</span> {t('Leads y listas')}</NavLink>}
+            {isSup && <NavLink className="menu-item" to="/leads"><span aria-hidden>☰</span> {t('Leads y listas')}</NavLink>}
             {isAdmin && (
               <>
-                <div className="nav-section">{t('Administración')}</div>
-                <NavLink to="/admin" end><span aria-hidden>⚙</span> {t('Resumen')}</NavLink>
-                <NavLink to="/admin/usuarios"><span aria-hidden>👤</span> {t('Usuarios')}</NavLink>
-                <NavLink to="/admin/telefonos"><span aria-hidden>☎</span> {t('Teléfonos')}</NavLink>
-                <NavLink to="/admin/campanas"><span aria-hidden>📣</span> {t('Campañas')}</NavLink>
-                <NavLink to="/admin/dids"><span aria-hidden>📞</span> {t('Números entrantes')}</NavLink>
-                <NavLink to="/admin/remotos"><span aria-hidden>📱</span> {t('Agentes remotos')}</NavLink>
-                <NavLink to="/admin/grabaciones"><span aria-hidden>🎙</span> {t('Grabaciones')}</NavLink>
-                <NavLink to="/admin/reportes"><span aria-hidden>📊</span> {t('Reportes')}</NavLink>
-                <NavLink to="/admin/dnc"><span aria-hidden>⛔</span> {t('Lista negra')}</NavLink>
-                <NavLink to="/admin/sms"><span aria-hidden>✉️</span> {t('Mensajería SMS')}</NavLink>
+                <div className="nav-section menu-item">{t('Administración')}</div>
+                <NavLink className="menu-item" to="/admin" end><span aria-hidden>⚙</span> {t('Resumen')}</NavLink>
+                <NavLink className="menu-item" to="/admin/usuarios"><span aria-hidden>👤</span> {t('Usuarios')}</NavLink>
+                <NavLink className="menu-item" to="/admin/telefonos"><span aria-hidden>☎</span> {t('Teléfonos')}</NavLink>
+                <NavLink className="menu-item" to="/admin/campanas"><span aria-hidden>📣</span> {t('Campañas')}</NavLink>
+                <NavLink className="menu-item" to="/admin/dids"><span aria-hidden>📞</span> {t('Números entrantes')}</NavLink>
+                <NavLink className="menu-item" to="/admin/remotos"><span aria-hidden>📱</span> {t('Agentes remotos')}</NavLink>
+                <NavLink className="menu-item" to="/admin/grabaciones"><span aria-hidden>🎙</span> {t('Grabaciones')}</NavLink>
+                <NavLink className="menu-item" to="/admin/reportes"><span aria-hidden>📊</span> {t('Reportes')}</NavLink>
+                <NavLink className="menu-item" to="/admin/dnc"><span aria-hidden>⛔</span> {t('Lista negra')}</NavLink>
+                <NavLink className="menu-item" to="/admin/sms"><span aria-hidden>✉️</span> {t('Mensajería SMS')}</NavLink>
               </>
             )}
           </nav>
           <div className="sidebar-foot">
             {classic.mounted && (
-              <button className="side-link" onClick={classic.visible ? ctx.hide : ctx.show}>
+              <button className="side-link menu-item" onClick={classic.visible ? ctx.hide : ctx.show}>
                 {classic.visible ? t('Ocultar pantalla clásica') : t('Ver pantalla clásica')}
               </button>
             )}
-            <button className="side-link" onClick={cycleTheme} title={t('Cambiar tema')}>
+            <button className="side-link menu-item" onClick={cycleTheme} title={t('Cambiar tema')}>
               {t('Tema')}: {t({ auto: 'automático', light: 'claro', dark: 'oscuro' }[theme])}
             </button>
-            <LangSwitch />
-            <div className="me">
+            <LangSwitch className="menu-item" />
+            <div className="me menu-item">
               <div className="avatar">{(user.name || user.user).slice(0, 1).toUpperCase()}</div>
               <div className="me-text">
                 <div className="me-name">{user.name || user.user}</div>
                 <div className="me-sub">{user.user} · {t('nivel {level}', { level: user.level })}</div>
               </div>
             </div>
-            <button className="side-link" onClick={fullLogout} disabled={leaving}>{leaving ? t('Cerrando la sesión…') : t('Salir')}</button>
+            <button className="side-link menu-item" onClick={fullLogout} disabled={leaving}>{leaving ? t('Cerrando la sesión…') : t('Salir')}</button>
           </div>
         </aside>
         <main className="main">
