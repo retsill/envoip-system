@@ -113,6 +113,12 @@ export default function Layout() {
         return;
       }
       if (!doc || !win) return;
+      // «Customer has hung up»: el cliente colgó. vicidial.php espera a que se pulse «Finish and Disposition Call»
+      // y, mientras tanto, ignora el colgar de la API. Lo pulsamos nosotros: cuelga y pasa a calificar.
+      if (visible(doc.getElementById('CustomerGoneBox')) && typeof win.CustomerGoneHangup === 'function') {
+        win.CustomerGoneHangup();
+        return;
+      }
       if (visible(doc.getElementById('NoneInSessionBox')) && typeof win.NoneInSessionOK === 'function') {
         busy = true;
         try {

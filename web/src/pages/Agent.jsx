@@ -575,9 +575,18 @@ function DispoCard({ statuses, onCall, run, busy, refresh }) {
     const isCb = s.scheduled_callback === 'Y';
     if (isCb && !cb.datetime) return setPick(s);
     await run('dispo', async () => {
-      // Orden recomendado por la documentación: pausar → colgar → calificar
+      // Orden recomendado por la documentación: pausar → colgar → calificar.
+      // vicidial.php ejecuta las órdenes de la API de una en una (cada segundo) y solo acepta la calificación
+      // cuando ya ha colgado: esperamos a que deje de estar en llamada antes de calificar.
       if (pauseAfter) await post('/agent/pause', { action: 'PAUSE' });
-      if (onCall) await post('/agent/hangup');
+      if (onCall) {
+        await post('/agent/hangup');
+        for (let i = 0; i < 20; i++) {
+          await new Promise((r) => setTimeout(r, 500));
+          const st = await api('/agent/state').catch(() => null);
+          if (!st?.loggedIn || !['INCALL', 'DEAD'].includes(st.agent.status)) break;
+        }
+      }
       await post('/agent/dispo', {
         status: s.status,
         ...(isCb ? { callback_datetime: cb.datetime, callback_type: cb.type, callback_comments: cb.comments } : {}),
