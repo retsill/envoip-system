@@ -16,6 +16,8 @@
 #     INGROUP        Cola de entrada para los agentes (por defecto SOPORTE).
 #     INGROUP_EXT    Extensión interna que llama a esa cola (por defecto 7000).
 #     SKIP_APP=1     No compilar ni desplegar la app web.
+#     WS_PORT        Puerto del WebSocket SIP para webphones y app: 443 (por defecto, vía Apache en /ws;
+#                    funciona detrás de Cloudflare) u 8089 (directo a Asterisk).
 # =============================================================================
 set -euo pipefail
 umask 022
@@ -25,6 +27,7 @@ SERVER_IP=$(awk -F'=> *' '/^VARserver_ip/{gsub(/ /,"",$2); print $2}' /etc/astgu
 PUBLIC_HOST=${PUBLIC_HOST:-$SERVER_IP}
 INGROUP=${INGROUP:-SOPORTE}
 INGROUP_EXT=${INGROUP_EXT:-7000}
+WS_PORT=${WS_PORT:-443}
 M="mysql --default-character-set=utf8mb4 asterisk"
 step() { printf '\n\033[1;34m== %s\033[0m\n' "$*"; }
 q() { $M -N -e "$1"; }
@@ -39,7 +42,7 @@ if [ "$node_major" -lt 18 ]; then
   zypper -n --gpg-auto-import-keys install nodejs20 npm20
 fi
 echo "Node.js $(node -v) · npm $(npm -v)"
-for m in proxy proxy_http; do a2enmod -q "$m" || a2enmod "$m"; done
+for m in proxy proxy_http proxy_wstunnel; do a2enmod -q "$m" || a2enmod "$m"; done
 getent group vicimodern >/dev/null || groupadd --system vicimodern
 id vicimodern &>/dev/null || useradd --system --gid vicimodern --home-dir "$APP" --shell /sbin/nologin vicimodern
 
@@ -63,7 +66,17 @@ q "UPDATE system_settings SET webphone_url='/viciphone/viciphone.php'"
 
 # -----------------------------------------------------------------------------
 step "2. WebRTC: URL WebSocket y plantilla de teléfonos"
-q "UPDATE servers SET web_socket_url='wss://$PUBLIC_HOST:8089/ws' WHERE server_ip='$SERVER_IP'"
+# WebSocket SIP de Asterisk también por HTTPS 443 (Apache /ws → Asterisk 8088). Así webphones y app usan
+# el mismo puerto que la web, y funciona detrás de Cloudflare (que no deja pasar el 8089).
+cat > /etc/apache2/conf.d/envoip-ws.conf <<'CONF'
+# EnVoip System: WebSocket SIP de Asterisk (webphones y app EnVoIP Phone) por HTTPS 443.
+<Location /ws>
+    ProxyPass ws://127.0.0.1:8088/ws
+    ProxyPassReverse ws://127.0.0.1:8088/ws
+</Location>
+CONF
+if [ "$WS_PORT" = "443" ]; then WS_URL="wss://$PUBLIC_HOST/ws"; else WS_URL="wss://$PUBLIC_HOST:$WS_PORT/ws"; fi
+q "UPDATE servers SET web_socket_url='$WS_URL' WHERE server_ip='$SERVER_IP'"
 # Sin 'context=default' los teléfonos WebRTC heredan 'trunkinbound' y sus llamadas internas
 # acaban en el DID por defecto («número fuera de servicio»).
 q "UPDATE vicidial_conf_templates
@@ -283,7 +296,7 @@ fi
 step "Listo"
 cat <<EOF
 Pendiente en producción:
-  - Certificado válido para $PUBLIC_HOST (Let's Encrypt) en Apache y en Asterisk (http.conf, puerto 8089).
+  - Certificado válido para $PUBLIC_HOST (Let's Encrypt) en Apache y en Asterisk: vicibox-ssl.
   - Carrier VOIPMS: poner credenciales de la subcuenta de voip.ms y activarlo.
   - En voip.ms: apuntar tus DIDs a la subcuenta y crear en Vicidial un DID por número (Administración →
     Números entrantes) con destino la cola $INGROUP.

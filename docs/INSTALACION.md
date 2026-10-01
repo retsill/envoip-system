@@ -29,7 +29,8 @@ Tiempo aproximado: 20–30 minutos (sin contar la instalación de ViciBox).
 |---|---|
 | **Dominio** | Por ejemplo `pbx.tuempresa.com`, apuntando a la IP del servidor. En un laboratorio vale la IP. |
 | **Certificado SSL válido** | Obligatorio para el audio del navegador (WebRTC): los navegadores no permiten el micrófono sin HTTPS. Let's Encrypt sirve (ver el apartado 3). |
-| **Puertos abiertos** | `443/tcp` (web), `8089/tcp` (WebSocket SIP de los webphones y de la app), `10000-20000/udp` (audio RTP), `5060/udp` solo hacia tu proveedor SIP, `22/tcp` solo desde tu IP. |
+| **Puertos abiertos** | `80/tcp` y `443/tcp` (web y WebSocket SIP de webphones y app en `wss://DOMINIO/ws`), `10000-20000/udp` (audio RTP), `5060/udp` solo hacia tu proveedor SIP, `22/tcp` solo desde tu IP. |
+| **Cloudflare (opcional)** | Se puede poner el dominio detrás del proxy de Cloudflare (nube naranja) para no publicar la IP: la web y el WebSocket SIP pasan por el 443. Modo SSL **Full (strict)** con un certificado válido en el servidor. El audio (RTP) y el proveedor SIP van siempre directos a la IP. |
 
 ### Vicidial
 
@@ -109,7 +110,7 @@ las contraseñas ya generadas. Hace esto:
 |---|---|
 | 0 | Node.js 20, módulos proxy de Apache y el usuario de sistema `vicimodern`. |
 | 1 | ViciPhone 3.0 servido desde el propio servidor (`/viciphone/`), sin depender de phone.viciphone.com. |
-| 2 | URL WebSocket `wss://PUBLIC_HOST:8089/ws` y plantilla WebRTC `VICIphoneSIP` para los teléfonos. |
+| 2 | WebSocket SIP en `wss://PUBLIC_HOST/ws` (Apache lo reenvía a Asterisk; con `WS_PORT=8089` se usa el puerto directo de Asterisk) y plantilla WebRTC `VICIphoneSIP`. |
 | 3 | Carrier `INTERNAL_EXT`: los agentes pueden marcar extensiones internas. |
 | 4 | Carrier `VOIPMS` (VoIP.ms) **desactivado**, con marcadores para completar (apartado 8). |
 | 5–6 | Cola de entrada `SOPORTE` y extensión interna **7000** que llama a esa cola. |
@@ -122,7 +123,7 @@ las contraseñas ya generadas. Hace esto:
 Al terminar debe mostrar `{"ok":true}  <- servicio OK`.
 
 > Variables opcionales: `INGROUP` (nombre de la cola, por defecto `SOPORTE`), `INGROUP_EXT`
-> (extensión de la cola, por defecto `7000`) y `SKIP_APP=1` (no compilar la web).
+> (extensión de la cola, por defecto `7000`), `WS_PORT` (`443` por defecto u `8089`) y `SKIP_APP=1` (no compilar la web).
 
 ---
 
@@ -258,7 +259,7 @@ Asterisk y los procesos de Vicidial; hasta entonces los agentes pueden ver aviso
 |---|---|
 | La web `/modern/` da error 503 | El servicio no está en marcha: `systemctl restart vicimodern` y mira `journalctl -u vicimodern -n 50`. |
 | «Usuario o contraseña incorrectos» con datos correctos | El usuario está inactivo, o Vicidial tiene las contraseñas cifradas activadas (no admitido en 1.0). |
-| El agente conecta pero no oye nada | Falta HTTPS válido o el puerto 8089 está cerrado. Abre `https://SERVIDOR:8089/ws` en el navegador: debe responder (aunque sea con un error de protocolo), no fallar la conexión. |
+| El agente conecta pero no oye nada | Falta HTTPS válido o el WebSocket no llega a Asterisk: `curl -i --http1.1 -H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' -H 'Sec-WebSocket-Protocol: sip' https://DOMINIO/ws` debe responder `101 Switching Protocols`. Si hay voz en un solo sentido, revisa que los puertos UDP 10000-20000 estén abiertos. |
 | «time synchronization problem» | Vicidial no está sincronizado con Asterisk: revisa la hora del servidor (`chronyc tracking`) y que los procesos de `screen -ls` estén vivos. Tras un reinicio, espera unos minutos. |
 | «No hay teléfonos disponibles» / teléfono no válido | El usuario no tiene «Teléfono por defecto» o la extensión no existe o está inactiva (Administración → Usuarios / Teléfonos). |
 | «La campaña no tiene leads para marcar» | La campaña no tiene listas activas o el hopper está vacío. Revisa Administración → Resumen. En campañas manuales se puede permitir «entrar sin leads». |
