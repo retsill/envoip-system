@@ -6,6 +6,7 @@ import { getAgentPass, lastCampaign, setAgentPass } from '../session.js';
 import SmsThread from '../components/SmsThread.jsx';
 import { t as tr, useT } from '../i18n.js';
 import { Modal, useConfirm } from '../components/Modal.jsx';
+import { dispoName } from '../dispositions.js';
 
 const FIELD_GROUPS = [
   ['Nombre', ['first_name', 'last_name']],
@@ -525,7 +526,7 @@ function RecentCalls({ act, busy }) {
                   <span className="strong">{c.name || fmtPhone(c.phone_number)}</span>
                   <span className="sub">
                     {c.name && <span className="mono">{fmtPhone(c.phone_number)} · </span>}
-                    {c.status_name || c.status} · {fmtDur(c.length_in_sec)}
+                    {dispoName(c.status, c.status_name)} · {fmtDur(c.length_in_sec)}
                   </span>
                 </span>
                 <span className="recent-time mono">{c.call_date.slice(5, 16).replace('-', '/')}</span>
@@ -553,7 +554,7 @@ function HistoryCard({ history }) {
               <tr key={i}>
                 <td className="mono">{h.call_date.slice(0, 16)}</td>
                 <td>{h.dir === 'IN' ? t('Entrante') : t('Saliente')}</td>
-                <td><span className="chip">{h.status}</span></td>
+                <td><span className="chip" title={dispoName(h.status)}>{h.status}</span></td>
                 <td>{h.user}</td>
                 <td className="num mono">{fmtDur(h.length_in_sec)}</td>
               </tr>
@@ -591,7 +592,7 @@ function DispoCard({ statuses, onCall, run, busy, refresh }) {
         status: s.status,
         ...(isCb ? { callback_datetime: cb.datetime, callback_type: cb.type, callback_comments: cb.comments } : {}),
       });
-    }, t('Llamada calificada: {status}', { status: s.status_name }));
+    }, t('Llamada calificada: {status}', { status: dispoName(s.status, s.status_name) }));
     setPick(null);
     setCb({ datetime: '', type: 'USERONLY', comments: '' });
     setTimeout(refresh, 500);
@@ -604,7 +605,7 @@ function DispoCard({ statuses, onCall, run, busy, refresh }) {
     <Card title={onCall ? t('Calificar y colgar') : t('Calificar llamada')} className="dispo-card">
       {pick ? (
         <div className="cb-form">
-          <p><b>{pick.status_name}</b>: {t('¿cuándo volvemos a llamar?')}</p>
+          <p><b>{dispoName(pick.status, pick.status_name)}</b>: {t('¿cuándo volvemos a llamar?')}</p>
           <label className="field"><span>{t('Fecha y hora')}</span>
             <input type="datetime-local" value={cb.datetime} onChange={(e) => setCb({ ...cb, datetime: e.target.value })} />
           </label>
@@ -629,7 +630,7 @@ function DispoCard({ statuses, onCall, run, busy, refresh }) {
             <div className="dispo-grid">
               {sales.map((s) => (
                 <button key={s.status} className="dispo dispo-sale" disabled={!!busy} onClick={() => submit(s)}>
-                  <b>{s.status_name}</b><span>{s.status}</span>
+                  <b>{dispoName(s.status, s.status_name)}</b><span>{s.status}</span>
                 </button>
               ))}
             </div>
@@ -637,7 +638,7 @@ function DispoCard({ statuses, onCall, run, busy, refresh }) {
           <div className="dispo-grid">
             {rest.map((s) => (
               <button key={s.status} className={`dispo${s.scheduled_callback === 'Y' ? ' dispo-cb' : ''}`} disabled={!!busy} onClick={() => submit(s)}>
-                <b>{s.status_name}</b><span>{s.status}{s.scheduled_callback === 'Y' ? ` · ${t('rellamada')}` : ''}</span>
+                <b>{dispoName(s.status, s.status_name)}</b><span>{s.status}{s.scheduled_callback === 'Y' ? ` · ${t('rellamada')}` : ''}</span>
               </button>
             ))}
           </div>

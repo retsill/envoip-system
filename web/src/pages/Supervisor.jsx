@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { fmtDur, fmtNum, fmtPhone, post, useNow, usePoll } from '../api.js';
 import { Card, Empty, Kpi, StatusBadge, statusMeta, useAction } from '../components/ui.jsx';
 import { useT } from '../i18n.js';
+import { dispoName } from '../dispositions.js';
 import { useConfirm } from '../components/Modal.jsx';
 
 
@@ -253,12 +254,13 @@ function HourlyChart({ rows }) {
 }
 
 function HBars({ rows }) {
+  useT();
   const max = Math.max(...rows.map((r) => r.n));
   return (
     <div className="hbars">
       {rows.map((r) => (
         <div className="hbar" key={r.status}>
-          <div className="hbar-label" title={r.status_name}>{r.status_name || r.status}</div>
+          <div className="hbar-label" title={r.status}>{dispoName(r.status, r.status_name)}</div>
           <div className="hbar-track"><div className="hbar-fill" style={{ width: `${(r.n / max) * 100}%` }} /></div>
           <div className="hbar-val">{fmtNum(r.n)}</div>
         </div>

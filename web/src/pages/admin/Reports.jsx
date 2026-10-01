@@ -3,6 +3,7 @@ import { fmtDur, fmtNum } from '../../api.js';
 import { Card, downloadCsv, Empty, Field, Kpi, useLoad } from '../../components/ui.jsx';
 import { AdminHead } from './Overview.jsx';
 import { useT } from '../../i18n.js';
+import { dispoName } from '../../dispositions.js';
 
 const iso = (d) => d.toLocaleDateString('sv');
 function preset(key) {
@@ -124,7 +125,7 @@ export default function Reports() {
             title={t('Resultados de las llamadas')}
             pad={false}
             actions={data.dispos.length > 0 && (
-              <button className="btn btn-sm" onClick={() => downloadCsv(`${t('resultados')}_${range.from}_${range.to}.csv`, data.dispos.map((d) => ({ [t('estado')]: d.status, [t('nombre')]: d.status_name, [t('llamadas')]: d.n, [t('porcentaje')]: pct(d.n, callTotal), [t('segundos')]: d.secs })))}>⬇ CSV</button>
+              <button className="btn btn-sm" onClick={() => downloadCsv(`${t('resultados')}_${range.from}_${range.to}.csv`, data.dispos.map((d) => ({ [t('estado')]: d.status, [t('nombre')]: dispoName(d.status, d.status_name), [t('llamadas')]: d.n, [t('porcentaje')]: pct(d.n, callTotal), [t('segundos')]: d.secs })))}>⬇ CSV</button>
             )}
           >
             {data.dispos.length === 0 ? <Empty icon="📞" title={t('No hay llamadas en este periodo')} /> : (
@@ -134,7 +135,7 @@ export default function Reports() {
                   {data.dispos.map((d) => (
                     <tr key={d.status}>
                       <td><span className={`chip ${d.sale === 'Y' ? 'chip-green' : ''}`}>{d.status}</span></td>
-                      <td>{d.status_name || '—'}</td>
+                      <td>{dispoName(d.status, d.status_name)}</td>
                       <td className="num">{fmtNum(d.n)}</td>
                       <td className="num">{pct(d.n, callTotal)}</td>
                       <td><div className="hbar-track"><div className="hbar-fill" style={{ width: `${(d.n / data.dispos[0].n) * 100}%` }} /></div></td>

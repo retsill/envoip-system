@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, fmtDur, fmtNum, fmtPhone } from '../api.js';
 import { Card, Drawer, Empty, Field, useAction, useLoad } from '../components/ui.jsx';
 import { useT } from '../i18n.js';
+import { dispoName } from '../dispositions.js';
 
 const BASE = import.meta.env.BASE_URL;
 const EMPTY = {
@@ -102,7 +103,7 @@ export default function LeadBrowser({ lists, campaigns, initial }) {
             <Field label={t('Estado')}>
               <select value={form.status} onChange={set('status')}>
                 <option value="">{t('Todos')}</option>
-                {statuses.map((s) => <option key={s.status} value={s.status}>{s.status} · {s.status_name}</option>)}
+                {statuses.map((s) => <option key={s.status} value={s.status}>{s.status} · {dispoName(s.status, s.status_name)}</option>)}
               </select>
             </Field>
             {more && (
@@ -181,7 +182,7 @@ export default function LeadBrowser({ lists, campaigns, initial }) {
                     <td className="mono">{fmtPhone(r.phone_number)}</td>
                     <td>{[r.city, r.state].filter(Boolean).join(', ')}</td>
                     <td className="mono">{r.list_id}</td>
-                    <td><span className="chip">{r.status}</span></td>
+                    <td><span className="chip" title={dispoName(r.status)}>{r.status}</span></td>
                     <td className="num">{r.called_count}</td>
                     <td className="mono small">{r.last_local_call_time?.startsWith('2008') ? '—' : r.last_local_call_time?.slice(0, 16)}</td>
                     <td className="mono small">{r.entry_date?.slice(0, 10)}</td>
@@ -265,7 +266,7 @@ function LeadDrawer({ id, lists, statuses, onClose, onSaved }) {
             <Field label={t('Estado')} dirty={changed.includes('status')}>
               <select value={f.status} onChange={(e) => setF({ ...f, status: e.target.value })}>
                 {!statuses.some((s) => s.status === f.status) && <option value={f.status}>{f.status}</option>}
-                {statuses.map((s) => <option key={s.status} value={s.status}>{s.status} · {s.status_name}</option>)}
+                {statuses.map((s) => <option key={s.status} value={s.status}>{s.status} · {dispoName(s.status, s.status_name)}</option>)}
               </select>
             </Field>
             <Field label={t('Lista')} dirty={changed.includes('list_id')}>

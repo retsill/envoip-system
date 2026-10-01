@@ -3,6 +3,7 @@ import { api, fmtNum } from '../../api.js';
 import { Card, Drawer, Empty, Field, Toggle, useAction, useLoad } from '../../components/ui.jsx';
 import { AdminHead, CLASSIC } from './Overview.jsx';
 import { useT } from '../../i18n.js';
+import { dispoName } from '../../dispositions.js';
 import { useConfirm } from '../../components/Modal.jsx';
 
 
@@ -129,7 +130,7 @@ function CampaignDrawer({ c, statuses, meta, onClose, onSaved }) {
           <p className="muted small">{t('Los leads con estos estados entran en el hopper. «NEW» son los que nunca se han llamado.')}</p>
           <div className="status-picks">
             {statuses.map((s) => (
-              <button type="button" key={s.status} className={`pick ${f.dial_statuses.includes(s.status) ? 'on' : ''}`} onClick={() => toggleStatus(s.status)} title={s.status_name}>
+              <button type="button" key={s.status} className={`pick ${f.dial_statuses.includes(s.status) ? 'on' : ''}`} onClick={() => toggleStatus(s.status)} title={dispoName(s.status, s.status_name)}>
                 {s.status}
               </button>
             ))}
