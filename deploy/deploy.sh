@@ -5,7 +5,8 @@ umask 022
 APP=/opt/vicimodern
 cd "$APP"
 
-id vicimodern &>/dev/null || useradd --system --home-dir "$APP" --shell /sbin/nologin vicimodern
+getent group vicimodern >/dev/null || groupadd --system vicimodern
+id vicimodern &>/dev/null || useradd --system --gid vicimodern --home-dir "$APP" --shell /sbin/nologin vicimodern
 
 echo "== Dependencias del servidor"
 (cd server && npm ci --omit=dev --no-audit --no-fund 2>/dev/null || npm install --omit=dev --no-audit --no-fund)

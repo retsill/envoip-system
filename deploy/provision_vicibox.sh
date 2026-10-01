@@ -40,7 +40,8 @@ if [ "$node_major" -lt 18 ]; then
 fi
 echo "Node.js $(node -v) · npm $(npm -v)"
 for m in proxy proxy_http; do a2enmod -q "$m" || a2enmod "$m"; done
-id vicimodern &>/dev/null || useradd --system --home-dir "$APP" --shell /sbin/nologin vicimodern
+getent group vicimodern >/dev/null || groupadd --system vicimodern
+id vicimodern &>/dev/null || useradd --system --gid vicimodern --home-dir "$APP" --shell /sbin/nologin vicimodern
 
 # -----------------------------------------------------------------------------
 step "1. ViciPhone local (webphone de los agentes servido desde este servidor)"
