@@ -136,8 +136,28 @@ las contraseñas ya generadas. Hace esto:
 | 8d | Completa el asistente de primer inicio de Vicidial **sin** resetear los teléfonos, carga las zonas horarias si faltan, instala el códec **Opus** y desactiva el relleno genérico de pérdidas de Asterisk (ver «Calidad de audio» en el apartado 8). |
 | 9 | Regenera la configuración de Asterisk. |
 | 10 | Compila la web e instala el servicio `vicimodern` y el proxy de Apache. |
+| 11 | Protege el acceso (ver abajo «Acceso al Vicidial clásico»). |
 
 Al terminar debe mostrar `{"ok":true}  <- servicio OK`.
+
+### Acceso al Vicidial clásico
+
+Tras instalar, la única puerta de entrada es EnVoip System (`https://PUBLIC_HOST/modern/`):
+
+- **Dominio único:** si `PUBLIC_HOST` es un dominio, cualquier otro nombre que apunte al servidor (el dominio raíz,
+  `www`, la IP…) redirige a él. El nombre del WebSocket (`WS_HOST`) solo sirve `/ws`. La raíz abre EnVoip System.
+- **Pantalla clásica del agente** (`/agc`, `/viciphone`): solo con una sesión abierta en EnVoip System
+  (la usa la pantalla oculta del agente).
+- **Admin clásico** (`/vicidial`, informes, grabaciones, etc.): solo si la sesión abierta en EnVoip System es de
+  administrador (nivel ≥ `ADMIN_LEVEL`). Vicidial sigue pidiendo además su propio usuario y contraseña.
+- Al cerrar sesión en EnVoip System el acceso se cierra. Las llamadas del propio servidor (scripts de Vicidial,
+  API) no se ven afectadas.
+
+Cómo funciona: al entrar, EnVoip System deja la cookie `vm_gate` y un archivo en `/var/lib/envoip-gate/`; Apache
+(`/etc/apache2/conf.d/envoip-gate.conf`, generado por `deploy.sh` desde `deploy/apache-envoip-gate.conf`) solo
+deja pasar si ese archivo existe. El dominio se toma de `PUBLIC_HOST` y `WS_HOST` en `/opt/vicimodern/.env`; si
+no están, no se fuerza un dominio único. Para abrir el Vicidial clásico sin EnVoip System en una emergencia:
+`rm /etc/apache2/conf.d/envoip-gate.conf && systemctl reload apache2` (se vuelve a crear con `deploy.sh`).
 
 > Variables opcionales: `INGROUP` (nombre de la cola, por defecto `SOPORTE`), `INGROUP_EXT`
 > (extensión de la cola, por defecto `7000`), `WS_HOST` (nombre para el WebSocket SIP; ver Cloudflare en Requisitos), `WS_PORT` (`443` por defecto u `8089`) y `SKIP_APP=1` (no compilar la web).

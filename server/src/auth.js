@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { openGate } from './gate.js';
 
 const SECRET = process.env.JWT_SECRET;
 if (!SECRET || SECRET.length < 32) throw new Error('JWT_SECRET no definido (mínimo 32 caracteres)');
@@ -25,6 +26,8 @@ export function requireAuth(req, res, next) {
     const bearer = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '')?.[1];
     const { user, name, level, group } = jwt.verify(bearer || req.cookies[COOKIE] || '', SECRET);
     req.user = { user, name, level, group };
+    // Sesión web: mantener abierta la llave del Vicidial clásico mientras se use la app
+    if (!bearer) openGate(req, res, req.cookies[COOKIE], level, { secure: cookieOptions.secure, maxAge: TTL_MS });
     next();
   } catch {
     res.status(401).json({ error: req.t('Sesión no válida o caducada') });

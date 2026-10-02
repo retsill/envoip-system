@@ -1,5 +1,12 @@
 # Novedades
 
+## 1.0.2 — 2026-10-02
+
+- **Seguridad:** el Vicidial clásico solo se abre desde EnVoip System: la pantalla del agente con cualquier sesión
+  abierta y el admin, informes y grabaciones solo con una sesión de administrador. Al cerrar sesión se cierra.
+- **Dominio único:** el dominio raíz, la IP u otros nombres redirigen al dominio principal; la raíz abre EnVoip System.
+- **Móvil:** menú lateral a pantalla completa, translúcido y animado; ninguna página se sale del ancho.
+
 ## 1.0.1 — 2026-10-01
 
 Mejoras aprendidas en la primera instalación de producción.

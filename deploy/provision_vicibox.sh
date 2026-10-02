@@ -280,6 +280,10 @@ if ! grep -q '^ENVOIP_DB_USER=' "$APP/.env"; then
   echo "base de datos envoip: credenciales añadidas a $APP/.env"
 fi
 q "GRANT ALL PRIVILEGES ON envoip.* TO 'envoip_app'@'localhost'"
+# Dominio único (deploy/apache-envoip-gate.conf): con un dominio, cualquier otro nombre o la IP redirigen a él
+if [[ "$PUBLIC_HOST" =~ [a-zA-Z] ]] && ! grep -q '^PUBLIC_HOST=' "$APP/.env"; then
+  printf 'PUBLIC_HOST=%s\nWS_HOST=%s\n' "$PUBLIC_HOST" "$WS_HOST" >> "$APP/.env"
+fi
 # Única escritura directa en Vicidial: tres opciones de agente que su API no permite cambiar
 # (sin ellas los agentes nuevos quedan solo para entrantes y la marcación automática no les llama).
 q "GRANT UPDATE (agent_choose_ingroups, agent_choose_blended, closer_default_blended, agentcall_manual) ON asterisk.vicidial_users TO 'modern_ro'@'localhost'"

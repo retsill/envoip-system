@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { one } from '../db.js';
 import { ah, HttpError } from '../util.js';
 import { APP_TOKEN_TTL_MS, COOKIE, cookieOptions, requireAuth, sign, TTL_MS } from '../auth.js';
+import { closeGate, openGate } from '../gate.js';
 
 const router = Router();
 
@@ -59,15 +60,18 @@ router.post(
   '/login',
   ah(async (req, res) => {
     const session = await checkCredentials(req);
-    res.cookie(COOKIE, sign(session), { ...cookieOptions, maxAge: TTL_MS });
+    const token = sign(session);
+    res.cookie(COOKIE, token, { ...cookieOptions, maxAge: TTL_MS });
+    await openGate(req, res, token, session.level, { secure: cookieOptions.secure, maxAge: TTL_MS });
     res.json(session);
   })
 );
 
-router.post('/logout', (req, res) => {
+router.post('/logout', ah(async (req, res) => {
+  await closeGate(res, req.cookies[COOKIE], { secure: cookieOptions.secure });
   res.clearCookie(COOKIE, cookieOptions);
   res.json({ ok: true });
-});
+}));
 
 router.get('/me', requireAuth, (req, res) => res.json(req.user));
 

@@ -2,7 +2,8 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BASE_PATH, requireAuth, requireLevel } from './auth.js';
+import { BASE_PATH, requireAuth, requireLevel, TTL_MS } from './auth.js';
+import { startGateCleanup } from './gate.js';
 import authRoutes from './routes/auth.js';
 import supervisorRoutes from './routes/supervisor.js';
 import agentRoutes from './routes/agent.js';
@@ -52,6 +53,8 @@ app.get([BASE_PATH, `${BASE_PATH}/*`], (req, res) => {
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(dist, 'index.html'));
 });
+
+startGateCleanup(TTL_MS);
 
 migrate()
   .then(startPolling)
