@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="docs/INSTALACION.md"><b>📘 Guía de instalación</b></a> ·
-  <a href="https://github.com/retsill/envoip-phone/releases/latest"><b>📱 App EnVoIP Phone (Windows y Mac)</b></a> ·
+  <a href="https://github.com/retsill/envoip-phone-releases/releases/latest"><b>📱 App EnVoIP Phone (Windows y Mac)</b></a> ·
   <a href="docs/PRODUCCION.md">Paso a producción</a> ·
   <a href="CHANGELOG.md">Novedades</a>
 </p>
@@ -100,11 +100,11 @@ historial, SMS y conexión con la pantalla de agente.
 
 | Sistema | Descarga |
 |---|---|
-| Windows — instalador | [EnVoIP-Phone-Setup.exe](https://github.com/retsill/envoip-phone/releases/latest) |
-| Windows — portable | [EnVoIP-Phone-Windows.zip](https://github.com/retsill/envoip-phone/releases/latest) |
-| macOS (Intel y Apple Silicon) | [EnVoIP-Phone.dmg](https://github.com/retsill/envoip-phone/releases/latest) |
+| Windows — instalador | [EnVoIP-Phone-Setup.exe](https://github.com/retsill/envoip-phone-releases/releases/latest) |
+| Windows — portable | [EnVoIP-Phone-Windows.zip](https://github.com/retsill/envoip-phone-releases/releases/latest) |
+| macOS (Intel y Apple Silicon) | [EnVoIP-Phone.dmg](https://github.com/retsill/envoip-phone-releases/releases/latest) |
 
-Código y todas las versiones: [github.com/retsill/envoip-phone](https://github.com/retsill/envoip-phone).
+Todas las versiones: [github.com/retsill/envoip-phone-releases](https://github.com/retsill/envoip-phone-releases/releases).
 Cómo conectarla a EnVoip System: [guía de instalación, apartado 9](docs/INSTALACION.md#9-app-envoip-phone-windows-y-mac).
 
 ## Cómo funciona

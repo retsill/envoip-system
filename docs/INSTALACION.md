@@ -256,11 +256,11 @@ Softphone para usar las extensiones fuera del navegador, con contactos, historia
 
 | Sistema | Descarga |
 |---|---|
-| **Windows** (instalador) | [EnVoIP-Phone-Setup.exe](https://github.com/retsill/envoip-phone/releases/latest) |
-| **Windows** (portable) | [EnVoIP-Phone-Windows.zip](https://github.com/retsill/envoip-phone/releases/latest) |
-| **macOS** (Intel y Apple Silicon) | [EnVoIP-Phone.dmg](https://github.com/retsill/envoip-phone/releases/latest) |
+| **Windows** (instalador) | [EnVoIP-Phone-Setup.exe](https://github.com/retsill/envoip-phone-releases/releases/latest) |
+| **Windows** (portable) | [EnVoIP-Phone-Windows.zip](https://github.com/retsill/envoip-phone-releases/releases/latest) |
+| **macOS** (Intel y Apple Silicon) | [EnVoIP-Phone.dmg](https://github.com/retsill/envoip-phone-releases/releases/latest) |
 
-Todas las versiones: <https://github.com/retsill/envoip-phone/releases>
+Todas las versiones: <https://github.com/retsill/envoip-phone-releases/releases>
 
 Para que un agente use **la web y la app a la vez**, cada agente necesita una segunda extensión solo
 para la app (una extensión SIP no puede estar en dos dispositivos a la vez):
