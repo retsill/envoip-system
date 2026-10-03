@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fmtPhone, usePoll } from '../api.js';
+import { fmtPhone, post, usePoll } from '../api.js';
 import SmsThread from '../components/SmsThread.jsx';
-import { Empty } from '../components/ui.jsx';
+import { Empty, useToast } from '../components/ui.jsx';
+import { useConfirm } from '../components/Modal.jsx';
+import { useLongPress } from '../components/useLongPress.js';
 import { useAuth } from '../App.jsx';
 import { locale, useT } from '../i18n.js';
 
@@ -23,9 +25,39 @@ export default function Messages() {
   const status = usePoll('/sms/status', 30000).data;
   const [q, setQ] = useState('');
   const [onlyUnread, setOnlyUnread] = useState(false);
-  const { data: convs } = usePoll(`/sms/conversations?q=${encodeURIComponent(q)}${onlyUnread ? '&unread=1' : ''}`, 4000);
+  const { data: convs, refresh } = usePoll(`/sms/conversations?q=${encodeURIComponent(q)}${onlyUnread ? '&unread=1' : ''}`, 4000);
   const [peer, setPeer] = useState(null);
   const [newNumber, setNewNumber] = useState('');
+  const confirm = useConfirm();
+  const toast = useToast();
+  // Selección para borrar varias conversaciones: se entra manteniendo pulsado o con la casilla
+  const [sel, setSel] = useState(() => new Set());
+  const selecting = sel.size > 0;
+  const toggle = (p) => setSel((s) => {
+    const n = new Set(s);
+    if (n.has(p)) n.delete(p);
+    else n.add(p);
+    return n;
+  });
+  const press = useLongPress((p) => toggle(p));
+
+  const removeConvs = async (peers) => {
+    const ok = await confirm({
+      title: peers.length === 1 ? t('Borrar conversación') : t('Borrar {n} conversaciones', { n: peers.length }),
+      message: t('Se borrarán todos sus mensajes para todos los usuarios de tu empresa (web y app). No se puede deshacer.'),
+      okText: t('Borrar'),
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await post('/sms/delete', { peers });
+      if (peers.includes(peer)) setPeer(null);
+      setSel(new Set());
+      refresh();
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
 
   const startNew = (e) => {
     e.preventDefault();
@@ -53,17 +85,37 @@ export default function Messages() {
       )}
       <div className="inbox">
         <aside className="inbox-list card">
-          <div className="inbox-tools">
-            <input className="search search-sm" placeholder={t('Buscar número, nombre o texto…')} value={q} onChange={(e) => setQ(e.target.value)} />
-            <label className="check"><input type="checkbox" checked={onlyUnread} onChange={(e) => setOnlyUnread(e.target.checked)} /> {t('Solo sin leer')}</label>
-          </div>
+          {selecting ? (
+            <div className="inbox-tools select-bar">
+              <span className="strong">{t('{n} seleccionadas', { n: sel.size })}</span>
+              <span className="select-actions">
+                <button className="btn btn-ghost btn-sm" onClick={() => setSel(new Set((convs || []).map((c) => c.peer)))}>{t('Todas')}</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setSel(new Set())}>{t('Cancelar')}</button>
+                <button className="btn btn-danger btn-sm" onClick={() => removeConvs([...sel])}>🗑 {t('Borrar')}</button>
+              </span>
+            </div>
+          ) : (
+            <div className="inbox-tools">
+              <input className="search search-sm" placeholder={t('Buscar número, nombre o texto…')} value={q} onChange={(e) => setQ(e.target.value)} />
+              <label className="check"><input type="checkbox" checked={onlyUnread} onChange={(e) => setOnlyUnread(e.target.checked)} /> {t('Solo sin leer')}</label>
+            </div>
+          )}
           {!convs ? <div className="muted" style={{ padding: 16 }}>{t('Cargando…')}</div> : convs.length === 0 ? (
             <Empty icon="💬" title={t('Sin conversaciones')}>{t('Los mensajes que envíes o recibas aparecerán aquí.')}</Empty>
           ) : (
             <ul className="conv-list">
               {convs.map((c) => (
-                <li key={c.peer}>
-                  <button className={`conv ${peer === c.peer ? 'on' : ''} ${c.unread ? 'unread' : ''}`} onClick={() => setPeer(c.peer)}>
+                <li key={c.peer} className={`conv-item ${selecting ? 'selecting' : ''} ${sel.has(c.peer) ? 'picked' : ''}`}>
+                  <button
+                    className={`conv ${peer === c.peer && !selecting ? 'on' : ''} ${c.unread ? 'unread' : ''}`}
+                    {...press.handlers(c.peer)}
+                    onClick={() => {
+                      if (press.consumed()) return;
+                      if (selecting) toggle(c.peer);
+                      else setPeer(c.peer);
+                    }}
+                  >
+                    <span className="conv-check" aria-hidden>{sel.has(c.peer) ? '✓' : ''}</span>
                     <span className="conv-main">
                       <span className="strong">{c.name || fmtPhone(c.peer)}</span>
                       <span className="sub">
@@ -76,6 +128,12 @@ export default function Messages() {
                       {c.unread > 0 && <span className="conv-badge">{c.unread}</span>}
                     </span>
                   </button>
+                  {!selecting && (
+                    <span className="row-actions">
+                      <button className="icon-btn" title={t('Seleccionar')} onClick={() => toggle(c.peer)}>☐</button>
+                      <button className="icon-btn danger" title={t('Borrar conversación')} onClick={() => removeConvs([c.peer])}>🗑</button>
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

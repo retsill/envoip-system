@@ -672,5 +672,14 @@
   "Cerrando la sesión…": "Signing out…",
   "Elige la campaña…": "Choose the campaign…",
   "Abrir menú": "Open menu",
-  "Cerrar menú": "Close menu"
+  "Cerrar menú": "Close menu",
+  "Borrar conversación": "Delete conversation",
+  "Borrar {n} conversaciones": "Delete {n} conversations",
+  "Se borrarán todos sus mensajes para todos los usuarios de tu empresa (web y app). No se puede deshacer.": "All its messages will be deleted for every user in your company (web and app). This can't be undone.",
+  "{n} seleccionadas": "{n} selected",
+  "{n} seleccionados": "{n} selected",
+  "Seleccionar": "Select",
+  "Borrar mensaje": "Delete message",
+  "Borrar {n} mensajes": "Delete {n} messages",
+  "Se borrará para todos los usuarios de tu empresa (web y app). No se puede deshacer.": "It will be deleted for every user in your company (web and app). This can't be undone."
 }

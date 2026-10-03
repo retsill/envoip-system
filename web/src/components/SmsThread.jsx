@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, fmtPhone, post } from '../api.js';
 import { useToast } from './ui.jsx';
+import { useConfirm } from './Modal.jsx';
+import { useLongPress } from './useLongPress.js';
 import { locale, t as tr, useT } from '../i18n.js';
 
 const BASE = import.meta.env.BASE_URL;
@@ -40,6 +42,33 @@ export default function SmsThread({ peer, leadId, compact = false, onPeerResolve
   const [sending, setSending] = useState(false);
   const listRef = useRef(null);
   const fileRef = useRef(null);
+  const confirm = useConfirm();
+  // Selección de mensajes para borrar (mantener pulsado, o el botón que aparece al pasar el ratón)
+  const [sel, setSel] = useState(() => new Set());
+  const selecting = sel.size > 0;
+  const toggle = (id) => setSel((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    return n;
+  });
+  const press = useLongPress((id) => toggle(id));
+  const removeMsgs = async (ids) => {
+    const ok = await confirm({
+      title: ids.length === 1 ? t('Borrar mensaje') : t('Borrar {n} mensajes', { n: ids.length }),
+      message: t('Se borrará para todos los usuarios de tu empresa (web y app). No se puede deshacer.'),
+      okText: t('Borrar'),
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await post('/sms/delete', { ids });
+      setData((d) => ({ ...d, messages: d.messages.filter((m) => !ids.includes(m.id)) }));
+      setSel(new Set());
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  };
   const path = leadId ? `/sms/lead/${leadId}` : `/sms/thread?peer=${encodeURIComponent(peer || '')}`;
 
   useEffect(() => {
@@ -101,7 +130,18 @@ export default function SmsThread({ peer, leadId, compact = false, onPeerResolve
     }
     const mine = m.direction === 'out';
     items.push(
-      <div key={m.id} className={`sms-row ${mine ? 'mine' : ''}`}>
+      <div
+        key={m.id}
+        className={`sms-row ${mine ? 'mine' : ''} ${selecting ? 'selecting' : ''} ${sel.has(m.id) ? 'picked' : ''}`}
+        {...press.handlers(m.id)}
+        onClick={() => {
+          if (press.consumed()) return;
+          if (selecting) toggle(m.id);
+        }}
+      >
+        {!selecting && (
+          <button type="button" className="icon-btn danger sms-del" title={t('Borrar mensaje')} onClick={(e) => { e.stopPropagation(); removeMsgs([m.id]); }}>🗑</button>
+        )}
         <div className={`sms-bubble ${mine ? 'mine' : ''} ${m.status === 'failed' ? 'failed' : ''}`}>
           {m.media.map((u) => (
             <a key={u} href={mediaUrl(u)} target="_blank" rel="noreferrer"><img src={mediaUrl(u)} alt={t('Imagen')} className="sms-img" /></a>
@@ -123,6 +163,16 @@ export default function SmsThread({ peer, leadId, compact = false, onPeerResolve
   return (
     <div className={`sms-thread ${compact ? 'compact' : ''}`}>
       {data.dnc && <div className="alert alert-warn">⛔ {t('Este número está en la lista negra (se dio de baja): no se le pueden enviar mensajes.')}</div>}
+      {selecting && (
+        <div className="select-bar">
+          <span className="strong">{t('{n} seleccionados', { n: sel.size })}</span>
+          <span className="select-actions">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSel(new Set(data.messages.map((m) => m.id)))}>{t('Todos')}</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSel(new Set())}>{t('Cancelar')}</button>
+            <button type="button" className="btn btn-danger btn-sm" onClick={() => removeMsgs([...sel])}>🗑 {t('Borrar')}</button>
+          </span>
+        </div>
+      )}
       <div className="sms-list" ref={listRef}>
         {items.length ? items : <div className="empty"><div className="empty-icon">💬</div><div className="empty-title">{t('Sin mensajes con {phone}', { phone: fmtPhone(data.peer) })}</div><div className="empty-text">{t('Escribe el primero abajo.')}</div></div>}
       </div>

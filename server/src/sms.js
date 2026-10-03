@@ -124,9 +124,9 @@ export async function conversations({ q = '', unreadOnly = false, limit = 200, d
   const d = didList(dids);
   const rows = await aall(
     `SELECT m.peer, m.did, m.body, m.media, m.direction, m.status, m.created_at, m.lead_id, m.user,
-            (SELECT COUNT(*) FROM sms_messages u WHERE u.peer = m.peer AND u.did IN (?) AND u.direction = 'in' AND u.read_at IS NULL) unread
+            (SELECT COUNT(*) FROM sms_messages u WHERE u.peer = m.peer AND u.did IN (?) AND u.direction = 'in' AND u.read_at IS NULL AND u.deleted_at IS NULL) unread
      FROM sms_messages m
-     JOIN (SELECT peer, MAX(id) id FROM sms_messages WHERE did IN (?) GROUP BY peer) last ON last.id = m.id
+     JOIN (SELECT peer, MAX(id) id FROM sms_messages WHERE did IN (?) AND deleted_at IS NULL GROUP BY peer) last ON last.id = m.id
      ORDER BY m.id DESC LIMIT ?`,
     [d, d, limit]
   );
@@ -147,7 +147,7 @@ export async function conversations({ q = '', unreadOnly = false, limit = 200, d
 }
 
 export async function thread(peer, { afterId = 0, dids } = {}) {
-  const rows = await aall('SELECT * FROM sms_messages WHERE peer = ? AND did IN (?) AND id > ? ORDER BY id LIMIT 1000', [
+  const rows = await aall('SELECT * FROM sms_messages WHERE peer = ? AND did IN (?) AND id > ? AND deleted_at IS NULL ORDER BY id LIMIT 1000', [
     normalize(peer),
     didList(dids),
     afterId,
@@ -157,19 +157,44 @@ export async function thread(peer, { afterId = 0, dids } = {}) {
 
 /** Mensajes nuevos de todas las conversaciones (sincronización de la app EnVoIP Phone). */
 export async function feed(afterId, { limit = 500, dids } = {}) {
-  const rows = await aall('SELECT * FROM sms_messages WHERE id > ? AND did IN (?) ORDER BY id LIMIT ?', [afterId, didList(dids), limit]);
+  const rows = await aall('SELECT * FROM sms_messages WHERE id > ? AND did IN (?) AND deleted_at IS NULL ORDER BY id LIMIT ?', [afterId, didList(dids), limit]);
   return rows.map((r) => ({ ...r, media: r.media ? JSON.parse(r.media) : [] }));
 }
 
 /** La imagen pertenece a un mensaje de alguno de estos DIDs. */
 export async function mediaVisible(file, dids) {
-  const r = await aone('SELECT id FROM sms_messages WHERE media LIKE ? AND did IN (?) LIMIT 1', [`%media:${file}%`, didList(dids)]);
+  const r = await aone('SELECT id FROM sms_messages WHERE media LIKE ? AND did IN (?) AND deleted_at IS NULL LIMIT 1', [`%media:${file}%`, didList(dids)]);
   return Boolean(r);
 }
 
 export async function unreadCount(dids) {
-  const r = await aone("SELECT COUNT(*) n FROM sms_messages WHERE direction = 'in' AND read_at IS NULL AND did IN (?)", [didList(dids)]);
+  const r = await aone("SELECT COUNT(*) n FROM sms_messages WHERE direction = 'in' AND read_at IS NULL AND deleted_at IS NULL AND did IN (?)", [didList(dids)]);
   return Number(r.n);
+}
+
+/**
+ * Borra mensajes (por id) y conversaciones enteras (por número) de los DIDs de la empresa. Quedan marcados como
+ * borrados: no se muestran, no se sincronizan y la consulta a VoIP.ms no los vuelve a traer.
+ */
+export async function remove({ ids = [], peers = [], dids, user }) {
+  const d = didList(dids);
+  let n = 0;
+  const idList = ids.map(Number).filter((x) => Number.isInteger(x) && x > 0).slice(0, 5000);
+  const peerList = peers.map(normalize).filter(Boolean).slice(0, 1000);
+  if (idList.length) {
+    n += (await arun('UPDATE sms_messages SET deleted_at = NOW(), deleted_by = ? WHERE id IN (?) AND did IN (?) AND deleted_at IS NULL', [user, idList, d])).affectedRows;
+  }
+  if (peerList.length) {
+    n += (await arun('UPDATE sms_messages SET deleted_at = NOW(), deleted_by = ? WHERE peer IN (?) AND did IN (?) AND deleted_at IS NULL', [user, peerList, d])).affectedRows;
+  }
+  return n;
+}
+
+/** Ids borrados desde [since] (para que la app los quite también en los demás equipos). */
+export async function deletedSince(since, dids) {
+  const now = (await aone('SELECT NOW() now')).now;
+  const rows = await aall('SELECT id FROM sms_messages WHERE deleted_at >= ? AND did IN (?) ORDER BY id LIMIT 5000', [since, didList(dids)]);
+  return { now, ids: rows.map((r) => Number(r.id)) };
 }
 
 export async function markRead(peer, dids) {

@@ -585,3 +585,29 @@ td.row-actions { white-space: nowrap; }
   .inbox-list .conv-list { overflow-y: auto; }
   .inbox-thread { height: 72dvh; }
 }
+
+/* Borrar mensajes y conversaciones: botón al pasar el ratón, selección (mantener pulsado) más oscura con ✓ */
+.conv-item { position: relative; list-style: none; }
+.conv-check { display: none; width: 22px; height: 22px; flex: 0 0 22px; border-radius: 50%; border: 2px solid var(--border); align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #fff; }
+.conv-item.selecting .conv-check { display: inline-flex; }
+.conv-item.picked .conv { background: color-mix(in srgb, var(--primary) 22%, var(--surface)); }
+.conv-item.picked .conv-check { background: var(--primary); border-color: var(--primary); }
+.row-actions { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; opacity: 0; transition: opacity .12s; background: var(--surface-2); border-radius: 8px; padding: 2px; }
+.conv-item:hover .row-actions, .conv-item:focus-within .row-actions { opacity: 1; }
+.icon-btn { border: 0; background: none; cursor: pointer; padding: 5px 7px; border-radius: 7px; font-size: 14px; line-height: 1; color: var(--text); }
+.icon-btn:hover { background: var(--surface); }
+.icon-btn.danger:hover { background: var(--red-soft); }
+.select-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid var(--border); background: var(--primary-soft); }
+.select-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.sms-row { position: relative; border-radius: 12px; transition: background .12s; user-select: none; -webkit-user-select: none; }
+.sms-row.selecting { cursor: pointer; }
+.sms-row.picked { background: color-mix(in srgb, var(--primary) 18%, transparent); }
+.sms-row.picked .sms-bubble { filter: brightness(.82); }
+.sms-row.picked::before { content: '✓'; position: absolute; top: 6px; left: -26px; width: 20px; height: 20px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.sms-row.mine.picked::before { left: auto; right: -26px; }
+.sms-del { position: absolute; top: 2px; opacity: 0; transition: opacity .12s; }
+.sms-row .sms-del { right: -34px; }
+.sms-row.mine .sms-del { right: auto; left: -34px; }
+.sms-row:hover .sms-del { opacity: 1; }
+.sms-list { padding-left: 34px; padding-right: 34px; }
+@media (hover: none) { .row-actions, .sms-del { display: none; } }

@@ -111,6 +111,27 @@ router.post(
   })
 );
 
+// Borrar mensajes sueltos ({ ids }) o conversaciones enteras ({ peers })
+router.post(
+  '/delete',
+  ah(async (req, res) => {
+    const b = req.body || {};
+    const ids = Array.isArray(b.ids) ? b.ids : [];
+    const peers = Array.isArray(b.peers) ? b.peers : [];
+    if (!ids.length && !peers.length) throw new HttpError(400, 'No hay nada que borrar');
+    res.json({ deleted: await sms.remove({ ids, peers, dids: req.smsDids, user: req.user.user }) });
+  })
+);
+
+// Borrados desde una fecha (sincronización de la app EnVoIP Phone)
+router.get(
+  '/deleted',
+  ah(async (req, res) => {
+    const since = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(String(req.query.since || '')) ? String(req.query.since).replace('T', ' ') : '1970-01-01 00:00:00';
+    res.json(await sms.deletedSince(since, req.smsDids));
+  })
+);
+
 router.post(
   '/read',
   ah(async (req, res) => {

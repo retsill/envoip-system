@@ -62,6 +62,9 @@ export async function migrate() {
       KEY k_lead (lead_id),
       KEY k_unread (direction, read_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+  // Borrado: el mensaje se marca (no se elimina) para que la consulta a VoIP.ms no lo vuelva a traer
+  await arun('ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS deleted_at DATETIME NULL, ADD COLUMN IF NOT EXISTS deleted_by VARCHAR(20) NULL');
+  await arun('ALTER TABLE sms_messages ADD INDEX IF NOT EXISTS k_deleted (deleted_at)');
 }
 
 // ---------------------------------------------------------------- Ajustes (clave/valor)
