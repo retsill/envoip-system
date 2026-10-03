@@ -2,6 +2,9 @@
 
 ## 1.0.2 — 2026-10-02
 
+- **Varias empresas:** administradores y supervisores ven solo su empresa (usuarios, campañas, listas, leads,
+  llamadas, grabaciones, informes, teléfonos, DIDs, chat), con las reglas de los grupos de usuarios de Vicidial.
+- **Acceso:** la contraseña se acepta como en Vicidial (sin espacios ni los símbolos que Vicidial no admite).
 - **Seguridad:** el Vicidial clásico solo se abre desde EnVoip System: la pantalla del agente con cualquier sesión
   abierta y el admin, informes y grabaciones solo con una sesión de administrador. Al cerrar sesión se cierra.
 - **Dominio único:** el dominio raíz, la IP u otros nombres redirigen al dominio principal; la raíz abre EnVoip System.

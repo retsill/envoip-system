@@ -90,7 +90,8 @@ export default function Overview() {
           </div>
 
           <div className="grid-2">
-            <Card title={t('Servidor')}>
+            {/* El servidor y los carriers son comunes a todas las empresas: solo los ve un administrador general */}
+            {data.server && <Card title={t('Servidor')}>
               <dl className="dl">
                 <dt>IP</dt><dd className="mono">{data.server?.server_ip}</dd>
                 <dt>Asterisk</dt><dd>{data.server?.asterisk_version}</dd>
@@ -110,7 +111,7 @@ export default function Overview() {
                   ))}
                 </ul>
               )}
-            </Card>
+            </Card>}
             <Card title={t('En el admin clásico')}>
               <p className="muted small">{t('La API de Vicidial no permite gestionar estas secciones; se abren en una pestaña nueva.')}</p>
               <div className="link-grid">

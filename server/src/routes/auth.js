@@ -29,8 +29,8 @@ function safeEqual(a, b) {
 
 async function checkCredentials(req) {
   if (blocked(req.ip)) throw new HttpError(429, 'Demasiados intentos. Espera unos minutos.');
-  const user = String(req.body?.user ?? '').slice(0, 20);
-  const pass = String(req.body?.pass ?? '').slice(0, 100);
+  const user = String(req.body?.user ?? '').trim().slice(0, 20);
+  const pass = String(req.body?.pass ?? '').trim().slice(0, 100);
   if (!user || !pass) throw new HttpError(400, 'Introduce usuario y contraseña');
   const ss = await one('SELECT pass_hash_enabled FROM system_settings LIMIT 1');
   if (ss?.pass_hash_enabled === '1')
@@ -39,7 +39,9 @@ async function checkCredentials(req) {
     "SELECT user, pass, full_name, user_level, user_group FROM vicidial_users WHERE user=? AND active='Y' AND api_only_user<>'1'",
     [user]
   );
-  if (!u || !u.pass || !safeEqual(u.pass, pass)) {
+  // Vicidial quita de la contraseña lo que no sea letra, número, «-» o «_» (admin.php): se acepta igual que allí
+  const vicidialPass = pass.replace(/[^-_0-9\p{L}]/gu, '');
+  if (!u || !u.pass || !(safeEqual(u.pass, pass) || safeEqual(u.pass, vicidialPass))) {
     registerFail(req.ip);
     throw new HttpError(401, 'Usuario o contraseña incorrectos');
   }

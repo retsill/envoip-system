@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { all, one } from '../db.js';
 import { ah, HttpError, str } from '../util.js';
+import { assertScope, inScope } from '../scope.js';
 
 // Chat interno de Vicidial (agente ↔ agente y supervisor ↔ agente), compatible con la pantalla clásica.
 // - Lecturas: tablas vicidial_manager_chats / vicidial_manager_chat_log (usuario de solo lectura).
@@ -142,8 +143,8 @@ router.get(
     res.json(
       await all(
         `SELECT la.user, u.full_name, la.status, la.campaign_id FROM vicidial_live_agents la
-         JOIN vicidial_users u ON u.user = la.user WHERE la.user <> ? ORDER BY u.full_name`,
-        [req.user.user]
+         JOIN vicidial_users u ON u.user = la.user WHERE la.user <> ? AND ${inScope(req.scope, 'groups', 'u.user_group').sql} ORDER BY u.full_name`,
+        [req.user.user, ...inScope(req.scope, 'groups', 'u.user_group').args]
       )
     );
   })
@@ -172,6 +173,7 @@ router.post(
   ah(async (req, res) => {
     const me = await credentials(req.user.user);
     const agent = str(req.body?.agent, { max: 20, re: /^[A-Za-z0-9]+$/, name: 'agente' });
+    assertScope(req.scope, 'users', agent);
     const text = str(req.body?.text, { max: 1000, name: 'mensaje' }).replace(/[\r\n]+/g, ' ');
     const existing = await one(
       `SELECT manager_chat_id id FROM vicidial_manager_chats

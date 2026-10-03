@@ -125,5 +125,10 @@
   "mensaje": "message",
   "ID de lista": "list ID",
   "lista": "list",
-  "estado": "status"
+  "estado": "status",
+  "Lista no encontrada": "List not found",
+  "Grupo no válido": "Invalid group",
+  "Cola no encontrada": "Queue not found",
+  "Número no encontrado": "Number not found",
+  "Esta opción es común a todas las empresas: solo la puede cambiar un administrador general": "This setting is shared by all companies: only a general administrator can change it"
 }

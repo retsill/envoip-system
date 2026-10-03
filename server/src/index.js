@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BASE_PATH, requireAuth, requireLevel, TTL_MS } from './auth.js';
 import { startGateCleanup } from './gate.js';
+import { withScope } from './scope.js';
 import authRoutes from './routes/auth.js';
 import supervisorRoutes from './routes/supervisor.js';
 import agentRoutes from './routes/agent.js';
@@ -30,12 +31,12 @@ const api = express.Router();
 api.use(i18n);
 api.get('/health', (req, res) => res.json({ ok: true }));
 api.use('/auth', authRoutes);
-api.use('/sup', requireAuth, requireLevel(SUPERVISOR_LEVEL), supervisorRoutes);
+api.use('/sup', requireAuth, requireLevel(SUPERVISOR_LEVEL), withScope, supervisorRoutes);
 api.use('/agent', requireAuth, agentRoutes);
-api.use('/leads', requireAuth, requireLevel(SUPERVISOR_LEVEL), leadRoutes);
-api.use('/admin', requireAuth, requireLevel(ADMIN_LEVEL), adminRoutes);
+api.use('/leads', requireAuth, requireLevel(SUPERVISOR_LEVEL), withScope, leadRoutes);
+api.use('/admin', requireAuth, requireLevel(ADMIN_LEVEL), withScope, adminRoutes);
 api.use('/sms', smsRoutes);
-api.use('/chat', requireAuth, chatRoutes);
+api.use('/chat', requireAuth, withScope, chatRoutes);
 api.use('/sms-hook', smsWebhook); // público, protegido por token
 api.use((req, res) => res.status(404).json({ error: req.t('Ruta no encontrada') }));
 // eslint-disable-next-line no-unused-vars

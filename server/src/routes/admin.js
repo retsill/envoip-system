@@ -5,6 +5,7 @@ import { nonAgentApi } from '../vici.js';
 import { assertCanManageLevel, loadPerms, requirePerm } from '../perms.js';
 import { ah, digits, HttpError, str } from '../util.js';
 import { appPhoneLogin } from './agent.js';
+import { assertAll, assertScope, callScope, clearScope, inScope } from '../scope.js';
 
 const router = Router();
 
@@ -27,36 +28,46 @@ async function mainServer() {
 router.get(
   '/summary',
   ah(async (req, res) => {
+    const sc = req.scope;
+    const users = inScope(sc, 'groups', 'user_group');
+    const live = inScope(sc, 'users', 'user');
+    const phonesF = inScope(sc, 'groups', 'p.user_group');
+    const camps = inScope(sc, 'campaigns', 'campaign_id');
+    const calls = callScope(sc);
+    const recs = inScope(sc, 'users', 'user');
+    const leadsF = inScope(sc, 'lists', 'list_id');
     const [counts, updater, server, carriers, campaigns, badPhones, lockedUsers, leads] = await Promise.all([
       one(`SELECT
-             (SELECT COUNT(*) FROM vicidial_users WHERE active='Y' AND user NOT IN ('VDAD','VDCL') AND api_only_user<>'1') users,
-             (SELECT COUNT(*) FROM vicidial_users WHERE active='Y' AND user_level < 7 AND api_only_user<>'1' AND user NOT IN ('VDAD','VDCL')) agents,
-             (SELECT COUNT(*) FROM vicidial_live_agents) logged,
-             (SELECT COUNT(*) FROM phones WHERE active='Y') phones,
-             (SELECT COUNT(*) FROM vicidial_campaigns WHERE active='Y') campaigns,
-             (SELECT COUNT(*) FROM vicidial_lists WHERE active='Y') lists,
-             (SELECT COUNT(*) FROM vicidial_log WHERE call_date >= CURDATE()) + (SELECT COUNT(*) FROM vicidial_closer_log WHERE call_date >= CURDATE()) calls_today,
-             (SELECT COUNT(*) FROM recording_log WHERE start_time >= CURDATE()) recordings_today`),
+             (SELECT COUNT(*) FROM vicidial_users WHERE active='Y' AND user NOT IN ('VDAD','VDCL') AND api_only_user<>'1' AND ${users.sql}) users,
+             (SELECT COUNT(*) FROM vicidial_users WHERE active='Y' AND user_level < 7 AND api_only_user<>'1' AND user NOT IN ('VDAD','VDCL') AND ${users.sql}) agents,
+             (SELECT COUNT(*) FROM vicidial_live_agents WHERE ${live.sql}) logged,
+             (SELECT COUNT(*) FROM phones p WHERE active='Y' AND ${phonesF.sql}) phones,
+             (SELECT COUNT(*) FROM vicidial_campaigns WHERE active='Y' AND ${camps.sql}) campaigns,
+             (SELECT COUNT(*) FROM vicidial_lists WHERE active='Y' AND ${camps.sql}) lists,
+             (SELECT COUNT(*) FROM vicidial_log WHERE call_date >= CURDATE() AND ${calls.out.sql}) + (SELECT COUNT(*) FROM vicidial_closer_log WHERE call_date >= CURDATE() AND ${calls.in.sql}) calls_today,
+             (SELECT COUNT(*) FROM recording_log WHERE start_time >= CURDATE() AND ${recs.sql}) recordings_today`,
+        [...users.args, ...users.args, ...live.args, ...phonesF.args, ...camps.args, ...camps.args, ...calls.out.args, ...calls.in.args, ...recs.args]),
       one('SELECT last_update, TIMESTAMPDIFF(SECOND, last_update, NOW()) lag FROM server_updater ORDER BY last_update DESC LIMIT 1'),
       one("SELECT server_ip, server_description, asterisk_version, max_vicidial_trunks FROM servers WHERE active_asterisk_server='Y' LIMIT 1"),
-      all("SELECT carrier_id, carrier_name, active, protocol FROM vicidial_server_carriers ORDER BY active DESC, carrier_id"),
+      // Los carriers son comunes a todas las empresas: solo los ve quien lo ve todo
+      sc.all ? all("SELECT carrier_id, carrier_name, active, protocol FROM vicidial_server_carriers ORDER BY active DESC, carrier_id") : [],
       all(`SELECT c.campaign_id, c.campaign_name, c.dial_method,
                   (SELECT COUNT(*) FROM vicidial_lists l WHERE l.campaign_id = c.campaign_id AND l.active = 'Y') active_lists,
                   (SELECT COUNT(*) FROM vicidial_hopper h WHERE h.campaign_id = c.campaign_id) hopper,
                   IFNULL(s.dialable_leads, 0) dialable
            FROM vicidial_campaigns c LEFT JOIN vicidial_campaign_stats s USING (campaign_id)
-           WHERE c.active = 'Y'`),
+           WHERE c.active = 'Y' AND ${inScope(sc, 'campaigns', 'c.campaign_id').sql}`, camps.args),
       // Webphone sin WebRTC: su plantilla no usa WebSocket seguro (se mira el contenido, no el nombre)
       all(`SELECT p.extension FROM phones p LEFT JOIN vicidial_conf_templates t ON t.template_id = p.template_id
-           WHERE p.active='Y' AND p.is_webphone IN ('Y','Y_API_LAUNCH') AND IFNULL(t.template_contents,'') NOT LIKE '%transport=%wss%'`),
-      all("SELECT user, full_name, failed_login_count FROM vicidial_users WHERE failed_login_count >= 5 AND active='Y'"),
-      one('SELECT COUNT(*) total FROM vicidial_list'),
+           WHERE p.active='Y' AND p.is_webphone IN ('Y','Y_API_LAUNCH') AND IFNULL(t.template_contents,'') NOT LIKE '%transport=%wss%' AND ${phonesF.sql}`, phonesF.args),
+      all(`SELECT user, full_name, failed_login_count FROM vicidial_users WHERE failed_login_count >= 5 AND active='Y' AND ${users.sql}`, users.args),
+      one(`SELECT COUNT(*) total FROM vicidial_list WHERE ${leadsF.sql}`, leadsF.args),
     ]);
 
     const warnings = [];
     if (!updater || updater.lag > 30)
       warnings.push({ level: 'error', text: req.t('Vicidial no está sincronizado con Asterisk (última actualización hace {lag} s). Los agentes verán «time synchronization problem» y no se podrán hacer llamadas.', { lag: updater ? updater.lag : '∞' }) });
-    if (!carriers.some((c) => c.active === 'Y'))
+    if (sc.all && !carriers.some((c) => c.active === 'Y'))
       warnings.push({ level: 'warn', text: req.t('No hay ningún carrier (troncal SIP) activo: las llamadas no pueden salir a teléfonos externos.'), link: '/vicidial/admin.php?ADD=140000000000' });
     for (const c of campaigns) {
       if (!Number(c.active_lists))
@@ -72,7 +83,7 @@ router.get(
     res.json({
       counts: { ...Object.fromEntries(Object.entries(counts).map(([k, v]) => [k, Number(v)])), leads: Number(leads.total) },
       sync: updater ? { last_update: updater.last_update, lag: Number(updater.lag) } : null,
-      server,
+      server: sc.all ? server : null,
       carriers,
       warnings,
     });
@@ -83,14 +94,16 @@ router.get(
 router.get(
   '/meta',
   ah(async (req, res) => {
+    const g = inScope(req.scope, 'groups', 'user_group');
+    const c = inScope(req.scope, 'campaigns', 'campaign_id');
     const [groups, campaigns, callTimes, templates, perms] = await Promise.all([
-      all('SELECT user_group, group_name FROM vicidial_user_groups ORDER BY user_group'),
-      all('SELECT campaign_id, campaign_name, active FROM vicidial_campaigns ORDER BY campaign_id'),
+      all(`SELECT user_group, group_name FROM vicidial_user_groups WHERE ${g.sql} ORDER BY user_group`, g.args),
+      all(`SELECT campaign_id, campaign_name, active FROM vicidial_campaigns WHERE ${c.sql} ORDER BY campaign_id`, c.args),
       all('SELECT call_time_id, call_time_name FROM vicidial_call_times ORDER BY call_time_id'),
       all('SELECT template_id, template_name FROM vicidial_conf_templates ORDER BY template_id'),
       loadPerms(req.user.user),
     ]);
-    res.json({ groups, campaigns, callTimes, templates, leadOrders: LEAD_ORDERS, dialMethods: DIAL_METHODS, perms });
+    res.json({ groups, campaigns, callTimes, templates, leadOrders: LEAD_ORDERS, dialMethods: DIAL_METHODS, perms, scoped: !req.scope.all });
   })
 );
 
@@ -99,12 +112,13 @@ router.get(
   '/users',
   requirePerm('modify_users'),
   ah(async (req, res) => {
+    const g = inScope(req.scope, 'groups', 'u.user_group');
     const rows = await all(`
       SELECT u.user, u.full_name, u.user_level, u.user_group, u.active, u.phone_login, u.email, u.last_login_date,
              u.failed_login_count, u.api_only_user, (la.user IS NOT NULL) logged_in, la.campaign_id
       FROM vicidial_users u LEFT JOIN vicidial_live_agents la ON la.user = u.user
-      WHERE u.user NOT IN ('VDAD','VDCL')
-      ORDER BY u.active DESC, u.user_level DESC, u.user`);
+      WHERE u.user NOT IN ('VDAD','VDCL') AND ${g.sql}
+      ORDER BY u.active DESC, u.user_level DESC, u.user`, g.args);
     res.json(rows.map((r) => ({ ...r, logged_in: Boolean(r.logged_in), protected: PROTECTED_USERS.has(r.user) })));
   })
 );
@@ -139,6 +153,7 @@ router.post(
     const user = str(b.user, { max: 20, re: /^[A-Za-z0-9]{2,20}$/, name: 'usuario (2-20 letras o números)' });
     const p = userFields(b, { creating: true });
     assertCanManageLevel(req.perms, p.agent_user_level);
+    assertScope(req.scope, 'groups', p.agent_user_group);
     const message = await nonAgentApi('add_user', { agent_user: user, ...p });
     // Agentes: sin ventana de elegir colas (bloquearía la conexión automática) y en modo «blended»
     // (entrantes y salientes). Sin esto Vicidial los deja solo para entrantes y la marcación automática no les llama.
@@ -149,6 +164,7 @@ router.post(
         .query("UPDATE vicidial_users SET agent_choose_ingroups='0', agent_choose_blended='0', closer_default_blended='1', agentcall_manual='1' WHERE user = ?", [user])
         .catch((e) => console.error('blended', e.message));
     }
+    clearScope();
     res.json({ ok: true, message });
   })
 );
@@ -159,13 +175,15 @@ router.patch(
   ah(async (req, res) => {
     const target = req.params.user;
     if (PROTECTED_USERS.has(target)) throw new HttpError(403, 'Este usuario del sistema no se puede editar aquí');
-    const current = await one('SELECT user_level FROM vicidial_users WHERE user = ?', [target]);
+    const current = await one('SELECT user_level, user_group FROM vicidial_users WHERE user = ?', [target]);
     if (!current) throw new HttpError(404, 'Usuario no encontrado');
+    assertScope(req.scope, 'groups', current.user_group);
     assertCanManageLevel(req.perms, current.user_level);
 
     const b = req.body || {};
     const p = userFields(b, { creating: false });
     if (p.agent_user_level !== undefined) assertCanManageLevel(req.perms, p.agent_user_level);
+    assertScope(req.scope, 'groups', p.agent_user_group);
     if (b.active !== undefined) p.active = b.active ? 'Y' : 'N';
     if (target === req.user.user) {
       if (p.active === 'N') throw new HttpError(400, 'No puedes desactivar tu propio usuario');
@@ -174,6 +192,7 @@ router.patch(
     }
     if (!Object.keys(p).length) throw new HttpError(400, 'No hay cambios');
     const message = await nonAgentApi('update_user', { agent_user: target, ...p });
+    clearScope();
     res.json({ ok: true, message });
   })
 );
@@ -183,8 +202,9 @@ router.post(
   '/users/:user/copy',
   requirePerm('modify_users'),
   ah(async (req, res) => {
-    const src = await one('SELECT user, user_level FROM vicidial_users WHERE user = ?', [req.params.user]);
+    const src = await one('SELECT user, user_level, user_group FROM vicidial_users WHERE user = ?', [req.params.user]);
     if (!src || PROTECTED_USERS.has(src.user)) throw new HttpError(404, 'Usuario de origen no válido');
+    assertScope(req.scope, 'groups', src.user_group);
     assertCanManageLevel(req.perms, src.user_level);
     const b = req.body || {};
     const user = str(b.user, { max: 20, re: /^[A-Za-z0-9]{2,20}$/, name: 'usuario (2-20 letras o números)' });
@@ -193,6 +213,7 @@ router.post(
     const message = await nonAgentApi('copy_user', { agent_user: user, agent_pass: pass, agent_full_name: name, source_user: src.user });
     // copy_user no copia el teléfono: si se indica, lo asignamos
     if (b.phone_login) await nonAgentApi('update_user', { agent_user: user, phone_login: str(b.phone_login, { max: 20, re: /^[A-Za-z0-9]+$/, name: 'teléfono' }) });
+    clearScope();
     res.json({ ok: true, message });
   })
 );
@@ -202,6 +223,7 @@ router.get(
   '/phones',
   requirePerm('ast_admin_access'),
   ah(async (req, res) => {
+    const g = inScope(req.scope, 'groups', 'p.user_group');
     const rows = await all(`
       SELECT p.extension, p.login, p.fullname, p.protocol, p.server_ip, p.active, p.is_webphone, p.template_id,
              p.status, p.local_gmt, la.user logged_user,
@@ -210,10 +232,19 @@ router.get(
       FROM phones p
       LEFT JOIN vicidial_live_agents la ON la.extension = CONCAT(p.protocol, '/', p.extension)
       LEFT JOIN vicidial_conf_templates t ON t.template_id = p.template_id
-      ORDER BY p.extension`);
+      WHERE ${g.sql}
+      ORDER BY p.extension`, g.args);
     res.json(rows.map((r) => ({ ...r, webrtc: Boolean(Number(r.webrtc)) })));
   })
 );
+
+// Teléfono de la empresa del usuario (404 si es de otra)
+async function phoneInScope(req, cols) {
+  const g = inScope(req.scope, 'groups', 'user_group');
+  const ph = await one(`SELECT ${cols} FROM phones WHERE extension = ? AND ${g.sql}`, [req.params.ext, ...g.args]);
+  if (!ph) throw new HttpError(404, 'Teléfono no encontrado');
+  return ph;
+}
 
 async function refreshAsterisk() {
   try {
@@ -236,7 +267,7 @@ router.post(
     const message = await nonAgentApi('add_phone', {
       extension: ext, dialplan_number: ext, voicemail_id: ext, phone_login: ext, phone_pass: pass,
       server_ip: s.server_ip, protocol: 'SIP', registration_password: crypto.randomBytes(8).toString('hex'),
-      phone_full_name: name, local_gmt: s.local_gmt, outbound_cid: '0000000000', admin_user_group: '---ALL---',
+      phone_full_name: name, local_gmt: s.local_gmt, outbound_cid: '0000000000', admin_user_group: req.scope.all ? '---ALL---' : req.scope.group,
       is_webphone: web ? 'Y' : 'N', webphone_auto_answer: web ? 'Y' : 'N', ...(web ? { template_id: 'VICIphoneSIP' } : {}),
     });
     await refreshAsterisk();
@@ -248,8 +279,7 @@ router.patch(
   '/phones/:ext',
   requirePerm('ast_admin_access'),
   ah(async (req, res) => {
-    const ph = await one('SELECT extension, server_ip FROM phones WHERE extension = ?', [req.params.ext]);
-    if (!ph) throw new HttpError(404, 'Teléfono no encontrado');
+    const ph = await phoneInScope(req, 'extension, server_ip');
     const b = req.body || {};
     const p = {};
     if (b.pass) p.phone_pass = str(b.pass, { max: 20, re: /^[A-Za-z0-9_.@#-]{6,20}$/, name: 'contraseña (mín. 6)' });
@@ -271,13 +301,13 @@ router.get(
   '/phones/:ext/connect',
   requirePerm('ast_admin_access'),
   ah(async (req, res) => {
+    await phoneInScope(req, 'extension');
     const ph = await one(
       `SELECT p.extension, p.login, p.conf_secret, p.is_webphone, p.template_id,
               IFNULL(t.template_contents,'') LIKE '%transport=%wss%' AS wss
        FROM phones p LEFT JOIN vicidial_conf_templates t ON t.template_id = p.template_id WHERE p.extension = ?`,
       [req.params.ext]
     );
-    if (!ph) throw new HttpError(404, 'Teléfono no encontrado');
     const app = await one("SELECT extension FROM phones WHERE login = ? AND active = 'Y'", [appPhoneLogin(ph.login)]);
     res.json({
       server: (req.get('x-forwarded-host') || req.hostname).split(',')[0].trim().replace(/:443$/, ''),
@@ -295,8 +325,7 @@ router.post(
   '/phones/:ext/app',
   requirePerm('ast_admin_access'),
   ah(async (req, res) => {
-    const web = await one('SELECT extension, login, fullname, server_ip, local_gmt, outbound_cid FROM phones WHERE extension = ?', [req.params.ext]);
-    if (!web) throw new HttpError(404, 'Teléfono no encontrado');
+    const web = await phoneInScope(req, 'extension, login, fullname, server_ip, local_gmt, outbound_cid, user_group');
     const ext = appPhoneLogin(web.login);
     if (!/^\d{2,20}$/.test(ext)) throw new HttpError(400, 'La extensión {ext} debe ser numérica para crear la de la app', { ext: web.login });
     if (await one('SELECT extension FROM phones WHERE extension = ? OR login = ?', [ext, ext])) {
@@ -306,7 +335,7 @@ router.post(
       extension: ext, dialplan_number: ext, voicemail_id: ext, phone_login: ext,
       phone_pass: crypto.randomBytes(6).toString('hex'), registration_password: crypto.randomBytes(8).toString('hex'),
       server_ip: web.server_ip, protocol: 'SIP', phone_full_name: `App ${web.fullname || web.extension}`.slice(0, 50),
-      local_gmt: web.local_gmt, outbound_cid: web.outbound_cid || '0000000000', admin_user_group: '---ALL---',
+      local_gmt: web.local_gmt, outbound_cid: web.outbound_cid || '0000000000', admin_user_group: web.user_group || '---ALL---',
       // Sin webphone (la app no carga ViciPhone), pero con la plantilla WebRTC: la app usa WSS
       is_webphone: 'N', webphone_auto_answer: 'N', template_id: 'VICIphoneSIP',
     });
@@ -319,8 +348,7 @@ router.delete(
   '/phones/:ext',
   requirePerm('ast_admin_access', 'ast_delete_phones'),
   ah(async (req, res) => {
-    const ph = await one('SELECT extension, server_ip, protocol FROM phones WHERE extension = ?', [req.params.ext]);
-    if (!ph) throw new HttpError(404, 'Teléfono no encontrado');
+    const ph = await phoneInScope(req, 'extension, server_ip, protocol');
     const inUse = await one('SELECT user FROM vicidial_live_agents WHERE extension = ?', [`${ph.protocol}/${ph.extension}`]);
     if (inUse) throw new HttpError(409, 'El agente {user} está usando este teléfono ahora mismo', { user: inUse.user });
     const message = await nonAgentApi('update_phone', { extension: ph.extension, server_ip: ph.server_ip, delete_phone: 'Y' });
@@ -344,7 +372,8 @@ router.get(
              (SELECT COUNT(*) FROM vicidial_live_agents la WHERE la.campaign_id = c.campaign_id) agents,
              IFNULL(s.dialable_leads, 0) dialable, IFNULL(s.calls_today, 0) calls_today
       FROM vicidial_campaigns c LEFT JOIN vicidial_campaign_stats s USING (campaign_id)
-      ORDER BY c.active DESC, c.campaign_id`);
+      WHERE ${inScope(req.scope, 'campaigns', 'c.campaign_id').sql}
+      ORDER BY c.active DESC, c.campaign_id`, inScope(req.scope, 'campaigns', 'c.campaign_id').args);
     const statuses = await all(`
       SELECT status, status_name FROM vicidial_statuses
       UNION SELECT DISTINCT status, status_name FROM vicidial_campaign_statuses ORDER BY status`);
@@ -359,6 +388,7 @@ router.patch(
   '/campaigns/:id',
   requirePerm('modify_campaigns'),
   ah(async (req, res) => {
+    assertScope(req.scope, 'campaigns', req.params.id);
     const c = await one('SELECT campaign_id, dial_statuses FROM vicidial_campaigns WHERE campaign_id = ?', [req.params.id]);
     if (!c) throw new HttpError(404, 'Campaña no encontrada');
     const b = req.body || {};
@@ -424,6 +454,11 @@ router.get(
     if (leadId) { where.push('r.lead_id = ?'); params.push(leadId); }
     if (phone.length >= 4) { where.push('vl.phone_number LIKE ?'); params.push(`%${phone}`); }
     if (!where.length) throw new HttpError(400, 'Indica al menos una fecha, agente, lead o teléfono');
+    if (!req.scope.all) {
+      // Grabaciones de los agentes o de los leads de la empresa
+      where.push('(r.user IN (?) OR vl.list_id IN (?))');
+      params.push(req.scope.users.length ? req.scope.users : ['-'], req.scope.lists.length ? req.scope.lists : ['-']);
+    }
     const rows = await all(
       `SELECT r.recording_id, r.start_time, r.length_in_sec, r.filename, r.location, r.lead_id, r.user, u.full_name,
               vl.phone_number, TRIM(CONCAT(IFNULL(vl.first_name,''),' ',IFNULL(vl.last_name,''))) lead_name
@@ -458,15 +493,19 @@ router.get(
   requirePerm('view_reports'),
   ah(async (req, res) => {
     const { from, to, campaign } = range(req.query);
+    if (campaign) assertScope(req.scope, 'campaigns', campaign);
     const sales = await saleStatuses();
     const campAgent = campaign ? 'AND a.campaign_id = ?' : '';
     const campCall = campaign ? 'AND campaign_id = ?' : '';
     const cp = campaign ? [campaign] : [];
+    // Sin campaña elegida: todas las de la empresa (salientes) y sus colas (entrantes)
+    const agentScope = inScope(req.scope, 'campaigns', 'a.campaign_id');
+    const cs = callScope(req.scope);
     const calls = `
-      SELECT call_date, status, length_in_sec, campaign_id FROM vicidial_log WHERE call_date >= ? AND call_date < ? + INTERVAL 1 DAY ${campCall}
+      SELECT call_date, status, length_in_sec, campaign_id FROM vicidial_log WHERE call_date >= ? AND call_date < ? + INTERVAL 1 DAY ${campCall} AND ${cs.out.sql}
       UNION ALL
-      SELECT call_date, status, length_in_sec, campaign_id FROM vicidial_closer_log WHERE call_date >= ? AND call_date < ? + INTERVAL 1 DAY ${campCall}`;
-    const callParams = [from, to, ...cp, from, to, ...cp];
+      SELECT call_date, status, length_in_sec, campaign_id FROM vicidial_closer_log WHERE call_date >= ? AND call_date < ? + INTERVAL 1 DAY ${campCall} AND ${cs.in.sql}`;
+    const callParams = [from, to, ...cp, ...cs.out.args, from, to, ...cp, ...cs.in.args];
 
     const [agents, dispos, daily] = await Promise.all([
       all(
@@ -475,9 +514,9 @@ router.get(
                 IFNULL(SUM(a.wait_sec),0) wait, IFNULL(SUM(a.dispo_sec),0) dispo, IFNULL(SUM(a.status IN (?)),0) sales,
                 MIN(a.event_time) first_event, MAX(a.event_time) last_event
          FROM vicidial_agent_log a LEFT JOIN vicidial_users u ON u.user = a.user
-         WHERE a.event_time >= ? AND a.event_time < ? + INTERVAL 1 DAY ${campAgent}
+         WHERE a.event_time >= ? AND a.event_time < ? + INTERVAL 1 DAY ${campAgent} AND ${agentScope.sql}
          GROUP BY a.user, u.full_name ORDER BY calls DESC`,
-        [sales, from, to, ...cp]
+        [sales, from, to, ...cp, ...agentScope.args]
       ),
       all(
         `SELECT t.status, MAX(s.status_name) status_name, MAX(s.sale) sale, COUNT(*) n, IFNULL(SUM(t.length_in_sec),0) secs
@@ -516,20 +555,28 @@ router.get(
   '/dids',
   requirePerm('modify_inbound_dids'),
   ah(async (req, res) => {
+    const sc = req.scope;
+    const dg = inScope(sc, 'groups', 'd.user_group');
+    const ig = inScope(sc, 'ingroups', 'group_id');
+    const pg = inScope(sc, 'groups', 'user_group');
     const [dids, ingroups, menus, phones] = await Promise.all([
       all(`SELECT did_id, did_pattern, did_description, did_active, did_route, extension, exten_context, voicemail_ext,
                   phone, server_ip, group_id, call_handle_method, agent_search_method, list_id, campaign_id, menu_id, record_call,
                   (SELECT COUNT(*) FROM vicidial_did_log l WHERE l.did_id = d.did_id AND l.call_date >= CURDATE()) calls_today
-           FROM vicidial_inbound_dids d ORDER BY did_pattern`),
-      all('SELECT group_id, group_name, active FROM vicidial_inbound_groups ORDER BY group_id'),
-      all('SELECT menu_id, menu_name FROM vicidial_call_menu ORDER BY menu_id'),
-      all("SELECT extension, fullname, server_ip FROM phones WHERE active = 'Y' ORDER BY extension"),
+           FROM vicidial_inbound_dids d WHERE ${dg.sql} ORDER BY did_pattern`, dg.args),
+      all(`SELECT group_id, group_name, active FROM vicidial_inbound_groups WHERE ${ig.sql} ORDER BY group_id`, ig.args),
+      sc.all ? all('SELECT menu_id, menu_name FROM vicidial_call_menu ORDER BY menu_id') : [],
+      all(`SELECT extension, fullname, server_ip FROM phones WHERE active = 'Y' AND ${pg.sql} ORDER BY extension`, pg.args),
     ]);
-    res.json({ dids: dids.map((d) => ({ ...d, calls_today: Number(d.calls_today) })), ingroups, menus, phones, routes: DID_ROUTES });
+    res.json({
+      dids: dids.map((d) => ({ ...d, calls_today: Number(d.calls_today) })), ingroups, menus, phones,
+      routes: sc.all ? DID_ROUTES : DID_ROUTES.filter((r) => r !== 'CALLMENU' && r !== 'EXTEN'),
+      canCreate: sc.all,
+    });
   })
 );
 
-async function didParams(b, creating) {
+async function didParams(b, creating, scope) {
   const p = {};
   if (b.did_description !== undefined) p.did_description = str(b.did_description, { max: 50, re: /^[^'"&]{6,50}$/, name: 'descripción (6-50 caracteres)' });
   else if (creating) throw new HttpError(400, 'Falta la descripción (6-50 caracteres)');
@@ -540,17 +587,22 @@ async function didParams(b, creating) {
   }
   if (b.did_route !== undefined) {
     if (!DID_ROUTES.includes(b.did_route)) throw new HttpError(400, 'Destino no válido');
+    if (!scope.all && (b.did_route === 'CALLMENU' || b.did_route === 'EXTEN')) throw new HttpError(400, 'Destino no válido');
     p.did_route = b.did_route;
     if (b.did_route === 'IN_GROUP') {
       p.group = str(b.group_id, { max: 20, name: 'in-group' });
+      assertScope(scope, 'ingroups', p.group);
       p.call_handle_method = ['CID', 'CIDLOOKUP', 'CLOSER'].includes(b.call_handle_method) ? b.call_handle_method : 'CID';
       p.agent_search_method = ['LB', 'LO', 'SO'].includes(b.agent_search_method) ? b.agent_search_method : 'LB';
       p.list_id = /^\d{3,12}$/.test(String(b.list_id || '')) ? b.list_id : '999';
+      if (p.list_id !== '999') assertScope(scope, 'lists', p.list_id);
       if (b.campaign_id) p.campaign_id = str(b.campaign_id, { max: 8, name: 'campaña' });
+      assertScope(scope, 'campaigns', p.campaign_id);
     } else if (b.did_route === 'CALLMENU') {
       p.menu_id = str(b.menu_id, { max: 50, name: 'menú IVR' });
     } else if (b.did_route === 'PHONE') {
-      const ph = await one("SELECT extension, server_ip FROM phones WHERE extension = ? AND active = 'Y'", [str(b.phone, { max: 100, name: 'teléfono' })]);
+      const pg = inScope(scope, 'groups', 'user_group');
+      const ph = await one(`SELECT extension, server_ip FROM phones WHERE extension = ? AND active = 'Y' AND ${pg.sql}`, [str(b.phone, { max: 100, name: 'teléfono' }), ...pg.args]);
       if (!ph) throw new HttpError(400, 'Teléfono no válido');
       p.phone_extension = ph.extension;
       p.server_ip = ph.server_ip;
@@ -564,13 +616,20 @@ async function didParams(b, creating) {
   return p;
 }
 
+async function didInScope(scope, pattern) {
+  const g = inScope(scope, 'groups', 'user_group');
+  if (!(await one(`SELECT did_id FROM vicidial_inbound_dids WHERE did_pattern = ? AND ${g.sql}`, [pattern, ...g.args])))
+    throw new HttpError(404, 'Número no encontrado');
+}
+
 router.post(
   '/dids',
   requirePerm('modify_inbound_dids'),
   ah(async (req, res) => {
+    assertAll(req.scope);
     const b = req.body || {};
     const pattern = str(b.did_pattern, { re: DID_RE, name: 'número (DID)' });
-    const p = await didParams({ active: true, record_call: 'N', ...b }, true);
+    const p = await didParams({ active: true, record_call: 'N', ...b }, true, req.scope);
     res.json({ ok: true, message: await nonAgentApi('add_did', { did_pattern: pattern, ...p }) });
   })
 );
@@ -580,7 +639,8 @@ router.patch(
   requirePerm('modify_inbound_dids'),
   ah(async (req, res) => {
     const pattern = str(req.params.pattern, { re: DID_RE, name: 'DID' });
-    const p = await didParams(req.body || {}, false);
+    await didInScope(req.scope, pattern);
+    const p = await didParams(req.body || {}, false, req.scope);
     if (!Object.keys(p).length) throw new HttpError(400, 'No hay cambios');
     res.json({ ok: true, message: await nonAgentApi('update_did', { did_pattern: pattern, ...p }) });
   })
@@ -590,6 +650,7 @@ router.post(
   '/dids/:pattern/copy',
   requirePerm('modify_inbound_dids'),
   ah(async (req, res) => {
+    assertAll(req.scope);
     const pattern = str(req.params.pattern, { re: DID_RE, name: 'DID' });
     const list = String(req.body?.new_dids || '').split(/[\s,;]+/).filter(Boolean);
     if (!list.length) throw new HttpError(400, 'Indica al menos un número nuevo');
@@ -604,6 +665,7 @@ router.delete(
   '/dids/:pattern',
   requirePerm('modify_inbound_dids', 'delete_inbound_dids'),
   ah(async (req, res) => {
+    assertAll(req.scope);
     const pattern = str(req.params.pattern, { re: DID_RE, name: 'DID' });
     if (pattern === 'default') throw new HttpError(400, 'El DID «default» es del sistema y no se puede borrar');
     res.json({ ok: true, message: await nonAgentApi('update_did', { did_pattern: pattern, delete_did: 'Y' }) });
@@ -619,7 +681,8 @@ router.get(
       SELECT r.remote_agent_id, r.user_start, u.full_name, r.number_of_lines, r.conf_exten, r.status, r.campaign_id, r.server_ip,
              (SELECT COUNT(*) FROM vicidial_live_agents la WHERE la.user = r.user_start) logged
       FROM vicidial_remote_agents r LEFT JOIN vicidial_users u ON u.user = r.user_start
-      ORDER BY r.user_start`);
+      WHERE ${inScope(req.scope, 'users', 'r.user_start').sql}
+      ORDER BY r.user_start`, inScope(req.scope, 'users', 'r.user_start').args);
     res.json(rows.map((r) => ({ ...r, logged: Number(r.logged) > 0 })));
   })
 );
@@ -630,8 +693,10 @@ router.patch(
   ah(async (req, res) => {
     const b = req.body || {};
     const p = { agent_user: str(req.params.user, { max: 20, name: 'agente' }) };
+    assertScope(req.scope, 'users', p.agent_user);
     if (b.status !== undefined) p.status = b.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE';
     if (b.campaign_id) p.campaign_id = str(b.campaign_id, { max: 8, name: 'campaña' });
+    assertScope(req.scope, 'campaigns', p.campaign_id);
     if (b.number_of_lines !== undefined) {
       const n = Number(b.number_of_lines);
       if (!(n >= 1 && n <= 99)) throw new HttpError(400, 'Número de líneas no válido');
@@ -647,15 +712,16 @@ router.get(
   requirePerm('modify_lists'),
   ah(async (req, res) => {
     const phone = digits(req.query.phone);
+    const cf = inScope(req.scope, 'campaigns', 'campaign_id');
     const [sys, camp] = await Promise.all([
       one('SELECT COUNT(*) n FROM vicidial_dnc'),
-      one('SELECT COUNT(*) n FROM vicidial_campaign_dnc'),
+      one(`SELECT COUNT(*) n FROM vicidial_campaign_dnc WHERE ${cf.sql}`, cf.args),
     ]);
     let result = null;
     if (phone.length >= 6) {
       const [inSys, inCamps] = await Promise.all([
         one('SELECT phone_number FROM vicidial_dnc WHERE phone_number = ?', [phone]),
-        all('SELECT campaign_id FROM vicidial_campaign_dnc WHERE phone_number = ?', [phone]),
+        all(`SELECT campaign_id FROM vicidial_campaign_dnc WHERE phone_number = ? AND ${cf.sql}`, [phone, ...cf.args]),
       ]);
       result = { phone, system: Boolean(inSys), campaigns: inCamps.map((r) => r.campaign_id) };
     }
@@ -663,23 +729,27 @@ router.get(
   })
 );
 
-function dncParams(b) {
+function dncParams(b, scope, removing) {
   const phone = digits(b.phone);
   if (phone.length < 6 || phone.length > 20) throw new HttpError(400, 'Teléfono no válido');
   const target = b.campaign_id ? str(b.campaign_id, { max: 30, name: 'campaña' }) : 'SYSTEM_INTERNAL';
+  // La lista del sistema bloquea el número para todas las empresas: cualquiera puede añadir, solo un
+  // administrador general puede quitar
+  if (target === 'SYSTEM_INTERNAL') { if (removing) assertAll(scope); }
+  else assertScope(scope, 'campaigns', target);
   return { phone_number: phone, campaign_id: target };
 }
 
 router.post(
   '/dnc',
   requirePerm('modify_lists'),
-  ah(async (req, res) => res.json({ ok: true, message: await nonAgentApi('add_dnc_phone', dncParams(req.body || {})) }))
+  ah(async (req, res) => res.json({ ok: true, message: await nonAgentApi('add_dnc_phone', dncParams(req.body || {}, req.scope, false)) }))
 );
 
 router.post(
   '/dnc/delete',
   requirePerm('modify_lists', 'delete_from_dnc'),
-  ah(async (req, res) => res.json({ ok: true, message: await nonAgentApi('delete_dnc_phone', dncParams(req.body || {})) }))
+  ah(async (req, res) => res.json({ ok: true, message: await nonAgentApi('delete_dnc_phone', dncParams(req.body || {}, req.scope, true)) }))
 );
 
 export default router;

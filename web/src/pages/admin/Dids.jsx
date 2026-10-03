@@ -36,7 +36,7 @@ export default function Dids() {
   return (
     <div className="page">
       <AdminHead title={t('Números entrantes (DIDs)')} subtitle={t('A dónde va cada llamada que entra por tus números')}>
-        <button className="btn btn-primary" onClick={() => setEditing({})}>＋ {t('Nuevo DID')}</button>
+        {data?.canCreate && <button className="btn btn-primary" onClick={() => setEditing({})}>＋ {t('Nuevo DID')}</button>}
       </AdminHead>
       {error && <div className="alert alert-error">{error}</div>}
       <Card pad={false}>
@@ -121,7 +121,7 @@ function DidDrawer({ did, opts, onClose, onSaved }) {
       title={creating ? t('Nuevo DID') : `DID ${did.did_pattern}`}
       subtitle={creating ? t('Número de teléfono entrante y a dónde enviarlo') : did.did_description}
       footer={<>
-        {!creating && did.did_pattern !== 'default' && <button className="btn btn-danger-ghost" style={{ marginRight: 'auto' }} disabled={!!busy} onClick={remove}>{t('Borrar')}</button>}
+        {!creating && opts.canCreate && did.did_pattern !== 'default' && <button className="btn btn-danger-ghost" style={{ marginRight: 'auto' }} disabled={!!busy} onClick={remove}>{t('Borrar')}</button>}
         <button className="btn btn-ghost" onClick={onClose}>{t('Cancelar')}</button>
         <button className="btn btn-primary" disabled={!!busy || unsupportedRoute} onClick={save}>{creating ? t('Crear DID') : t('Guardar')}</button>
       </>}
@@ -194,7 +194,7 @@ function DidDrawer({ did, opts, onClose, onSaved }) {
           </fieldset>
         )}
 
-        {!creating && (
+        {!creating && opts.canCreate && (
           <fieldset className="fgroup"><legend>{t('Copiar configuración a otros números')}</legend>
             <div className="stack">
               <Field label={t('Números nuevos')} hint={t('Separados por comas o espacios. Tendrán el mismo destino y opciones.')}>

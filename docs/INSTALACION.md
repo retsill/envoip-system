@@ -240,6 +240,24 @@ elige por cuál sale con su **prefijo** y su **Caller ID**. Ejemplo con voip.ms:
   --remove-service=asterisk` y una regla rica para la IP del POP). Con el 5060 cerrado al resto, la lista negra
   VoIPBL de ViciBox ya no hace falta y conviene quitarla de cron: bloquea `firewalld` durante horas.
 
+### Administradores y supervisores por empresa
+
+EnVoip System aplica las mismas reglas que el admin clásico: cada usuario ve solo lo que permite **su grupo de
+usuarios** (*Admin → User Groups*).
+
+- **Allowed Campaigns:** campañas, sus listas y leads, llamadas, grabaciones e informes.
+- **Admin Viewable Groups:** usuarios, agentes en el panel de supervisión, chat interno, teléfonos, colas de
+  entrada y números (DIDs). El propio grupo siempre es visible.
+- Un grupo con `-ALL-CAMPAIGNS-` y `---ALL---` (como `ADMIN`) lo ve todo: es el **administrador general**.
+
+Para dar un administrador a una empresa: crea el usuario con **nivel 8** en el grupo de la empresa y dale solo los
+permisos de lo suyo (usuarios, campañas, listas, carga de leads, informes, grabaciones). No le des
+`modify_carriers`, `modify_servers`, `modify_usergroups` ni `ast_admin_access` si no debe tocar lo común.
+
+Lo común a todas las empresas solo lo cambia el administrador general: carriers, datos del servidor, ajustes de
+SMS, crear o borrar DIDs y quitar números de la lista negra del sistema. Los teléfonos y DIDs se asignan a una
+empresa con su **Admin User Group** (los teléfonos que crea un administrador de empresa ya quedan en su grupo).
+
 ### Llamadas entrantes: cola por empresa, mensaje de espera y buzón
 
 Los números deben ir a una **cola de Vicidial (In-Group)**, no a un teléfono: así el cliente que devuelve la llamada

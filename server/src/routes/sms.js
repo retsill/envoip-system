@@ -3,6 +3,7 @@ import path from 'node:path';
 import { one } from '../db.js';
 import * as sms from '../sms.js';
 import { requireAuth, requireLevel } from '../auth.js';
+import { assertAll, withScope } from '../scope.js';
 import { ah, HttpError } from '../util.js';
 
 // ---------------------------------------------------------------- Público (webhook de VoIP.ms)
@@ -110,7 +111,9 @@ router.get(
 router.get(
   '/settings',
   requireLevel(8),
+  withScope,
   ah(async (req, res) => {
+    assertAll(req.scope);
     const cfg = await sms.getConfig();
     const base = `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers['x-forwarded-host'] || req.headers.host}${process.env.BASE_PATH || '/modern'}`;
     res.json({
@@ -124,14 +127,16 @@ router.get(
 router.put(
   '/settings',
   requireLevel(8),
+  withScope,
   ah(async (req, res) => {
+    assertAll(req.scope);
     await sms.saveConfig(req.body || {});
     res.json({ ok: true });
   })
 );
 
-router.post('/settings/test', requireLevel(8), ah(async (req, res) => res.json({ ok: true, dids: await sms.testConfig() })));
+router.post('/settings/test', requireLevel(8), withScope, ah(async (req, res) => assertAll(req.scope) || res.json({ ok: true, dids: await sms.testConfig() })));
 
-router.post('/poll', requireLevel(8), ah(async (req, res) => res.json({ added: await sms.poll() })));
+router.post('/poll', requireLevel(8), withScope, ah(async (req, res) => assertAll(req.scope) || res.json({ added: await sms.poll() })));
 
 export default router;

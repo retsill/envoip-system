@@ -3,6 +3,7 @@ import { all, db, one } from '../db.js';
 import { nonAgentApi } from '../vici.js';
 import { requirePerm } from '../perms.js';
 import { ah, digits, HttpError, str } from '../util.js';
+import { assertScope, clearScope, inScope } from '../scope.js';
 
 const router = Router();
 
@@ -16,12 +17,14 @@ const DUP_CHECKS = ['', 'DUPLIST', 'DUPCAMP', 'DUPSYS'];
 router.get(
   '/lists',
   ah(async (req, res) => {
+    const f = inScope(req.scope, 'campaigns', 'l.campaign_id');
     const rows = await all(`
       SELECT l.list_id, l.list_name, l.campaign_id, l.active, l.list_description, l.list_lastcalldate,
              COUNT(v.lead_id) leads, IFNULL(SUM(v.status = 'NEW'),0) new_leads,
              IFNULL(SUM(v.called_since_last_reset = 'N'),0) not_called
       FROM vicidial_lists l LEFT JOIN vicidial_list v ON v.list_id = l.list_id
-      GROUP BY l.list_id ORDER BY l.list_id`);
+      WHERE ${f.sql}
+      GROUP BY l.list_id ORDER BY l.list_id`, f.args);
     res.json(rows.map((r) => ({ ...r, leads: Number(r.leads), new_leads: Number(r.new_leads), not_called: Number(r.not_called) })));
   })
 );
@@ -29,7 +32,8 @@ router.get(
 router.get(
   '/campaigns',
   ah(async (req, res) => {
-    res.json(await all('SELECT campaign_id, campaign_name, active FROM vicidial_campaigns ORDER BY campaign_id'));
+    const f = inScope(req.scope, 'campaigns', 'campaign_id');
+    res.json(await all(`SELECT campaign_id, campaign_name, active FROM vicidial_campaigns WHERE ${f.sql} ORDER BY campaign_id`, f.args));
   })
 );
 
@@ -38,13 +42,16 @@ router.post(
   requirePerm('modify_lists'),
   ah(async (req, res) => {
     const b = req.body || {};
+    const campaignId = str(b.campaign_id, { max: 8, name: 'campaña' });
+    assertScope(req.scope, 'campaigns', campaignId);
     const message = await nonAgentApi('add_list', {
       list_id: str(b.list_id, { max: 14, re: /^\d{2,14}$/, name: 'ID de lista' }),
       list_name: str(b.list_name, { max: 30, name: 'nombre' }),
-      campaign_id: str(b.campaign_id, { max: 8, name: 'campaña' }),
+      campaign_id: campaignId,
       active: b.active ? 'Y' : 'N',
       list_description: str(b.list_description, { max: 255, required: false, name: 'descripción' }),
     });
+    clearScope();
     res.json({ ok: true, message });
   })
 );
@@ -54,15 +61,19 @@ router.patch(
   requirePerm('modify_lists'),
   ah(async (req, res) => {
     const listId = str(req.params.id, { re: /^\d{2,14}$/, name: 'lista' });
+    assertScope(req.scope, 'lists', listId);
     const b = req.body || {};
     const p = {};
     if (b.list_name !== undefined) p.list_name = str(b.list_name, { max: 30, re: /^[^'"&]{6,30}$/, name: 'nombre (6-30, sin comillas ni &)' });
     if (b.campaign_id !== undefined) p.campaign_id = str(b.campaign_id, { max: 8, name: 'campaña' });
+    assertScope(req.scope, 'campaigns', p.campaign_id);
     if (b.active !== undefined) p.active = b.active ? 'Y' : 'N';
     if (b.list_description !== undefined) p.list_description = String(b.list_description).slice(0, 255) || '--BLANK--';
     if (b.reset_list) p.reset_list = 'Y';
     if (!Object.keys(p).length) throw new HttpError(400, 'No hay cambios');
-    res.json({ ok: true, message: await nonAgentApi('update_list', { list_id: listId, ...p }) });
+    const message = await nonAgentApi('update_list', { list_id: listId, ...p });
+    clearScope();
+    res.json({ ok: true, message });
   })
 );
 
@@ -71,6 +82,7 @@ router.delete(
   requirePerm('modify_lists', 'delete_lists'),
   ah(async (req, res) => {
     const listId = str(req.params.id, { re: /^\d{2,14}$/, name: 'lista' });
+    assertScope(req.scope, 'lists', listId);
     const p = { list_id: listId, delete_list: 'Y' };
     if (req.query.leads === 'Y') p.delete_leads = 'Y';
     res.json({ ok: true, message: await nonAgentApi('update_list', p) });
@@ -94,9 +106,13 @@ const EXPORT_COLUMNS = [
   'rank', 'owner', 'entry_list_id',
 ];
 
-function leadFilters(q) {
+function leadFilters(q, scope) {
   const where = [];
   const args = [];
+  if (!scope.all) {
+    where.push('list_id IN (?)');
+    args.push(scope.lists.length ? scope.lists : ['-1']);
+  }
   const opt = (v, max = 50) => String(v ?? '').trim().slice(0, max);
   if (opt(q.lead_id)) {
     where.push('lead_id = ?');
@@ -134,13 +150,13 @@ function leadFilters(q) {
   const field = DATE_FIELDS[q.date_field] || 'entry_date';
   if (DATE_RE.test(q.from || '')) where.push(`${field} >= ?`), args.push(`${q.from} 00:00:00`);
   if (DATE_RE.test(q.to || '')) where.push(`${field} <= ?`), args.push(`${q.to} 23:59:59`);
-  return { sql: where.length ? `WHERE ${where.join(' AND ')}` : '', args, empty: !where.length };
+  return { sql: where.length ? `WHERE ${where.join(' AND ')}` : '', args };
 }
 
 router.get(
   '/leads',
   ah(async (req, res) => {
-    const f = leadFilters(req.query);
+    const f = leadFilters(req.query, req.scope);
     const size = Math.min(Math.max(Number(req.query.size) || 50, 10), 500);
     const page = Math.max(Number(req.query.page) || 1, 1);
     const sort = SORTS[req.query.sort] || 'lead_id';
@@ -163,7 +179,7 @@ router.get(
   '/leads/export',
   requirePerm('download_lists'),
   ah(async (req, res) => {
-    const f = leadFilters(req.query);
+    const f = leadFilters(req.query, req.scope);
     const name = req.query.list_id ? `list_${digits(req.query.list_id)}` : req.query.campaign_id ? `campaign_${String(req.query.campaign_id).replace(/\W/g, '')}` : 'leads';
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${name}_${new Date().toISOString().slice(0, 10)}.csv"`);
@@ -198,7 +214,7 @@ router.get(
   ah(async (req, res) => {
     const id = Number(req.params.id) || 0;
     const lead = await one(`SELECT ${EXPORT_COLUMNS.join(',')} FROM vicidial_list WHERE lead_id = ?`, [id]);
-    if (!lead) throw new HttpError(404, 'Lead no encontrado');
+    if (!lead || !leadVisible(req.scope, lead.list_id)) throw new HttpError(404, 'Lead no encontrado');
     const [calls, recordings, list] = await Promise.all([
       all(
         `(SELECT call_date, 'OUT' dir, campaign_id, status, user, length_in_sec, phone_number FROM vicidial_log WHERE lead_id = ? ORDER BY call_date DESC LIMIT 100)
@@ -214,6 +230,8 @@ router.get(
   })
 );
 
+const leadVisible = (scope, listId) => scope.all || scope.lists.includes(String(listId));
+
 const EDIT_FIELDS = { ...IMPORT_FIELDS, phone_number: 18, phone_code: 4, owner: 20, rank: 5, status: 6, list_id: 14 };
 
 // Modificar un lead (API oficial update_lead)
@@ -222,6 +240,8 @@ router.patch(
   requirePerm('modify_leads'),
   ah(async (req, res) => {
     const id = Number(req.params.id) || 0;
+    const cur = await one('SELECT list_id FROM vicidial_list WHERE lead_id = ?', [id]);
+    if (!cur || !leadVisible(req.scope, cur.list_id)) throw new HttpError(404, 'Lead no encontrado');
     const b = req.body || {};
     const p = {};
     for (const [k, max] of Object.entries(EDIT_FIELDS)) {
@@ -232,6 +252,7 @@ router.patch(
     if (p.phone_number) p.phone_number = digits(p.phone_number);
     if (p.status && !/^[A-Za-z0-9_-]{1,6}$/.test(p.status)) throw new HttpError(400, '{name} no válido', { name: 'estado' });
     if (p.list_id && !/^\d{1,14}$/.test(p.list_id)) throw new HttpError(400, '{name} no válido', { name: 'lista' });
+    if (p.list_id) assertScope(req.scope, 'lists', p.list_id);
     if (!Object.keys(p).length) throw new HttpError(400, 'No hay cambios');
     // La API cambia la lista con «list_id_field» (list_id sirve para buscar)
     if (p.list_id) {
@@ -251,11 +272,12 @@ router.get(
     const where = d.length >= 4 && d.length === q.replace(/[\s()+-]/g, '').length
       ? ['phone_number LIKE ? OR alt_phone LIKE ?', [`%${d}%`, `%${d}%`]]
       : ['first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR vendor_lead_code = ?', [`${q}%`, `${q}%`, `${q}%`, q]];
+    const sf = inScope(req.scope, 'lists', 'list_id');
     const rows = await all(
       `SELECT lead_id, list_id, status, phone_code, phone_number, first_name, last_name, city, email,
               called_count, last_local_call_time, entry_date
-       FROM vicidial_list WHERE ${where[0]} ORDER BY lead_id DESC LIMIT 50`,
-      where[1]
+       FROM vicidial_list WHERE (${where[0]}) AND ${sf.sql} ORDER BY lead_id DESC LIMIT 50`,
+      [...where[1], ...sf.args]
     );
     res.json(rows);
   })
@@ -268,6 +290,7 @@ router.post(
   ah(async (req, res) => {
     const b = req.body || {};
     const listId = str(b.list_id, { max: 14, re: /^\d{2,14}$/, name: 'lista' });
+    assertScope(req.scope, 'lists', listId);
     const phoneCode = digits(b.phone_code) || '1';
     const dup = DUP_CHECKS.includes(b.duplicate_check) ? b.duplicate_check : '';
     const rows = Array.isArray(b.rows) ? b.rows : [];
