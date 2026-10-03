@@ -89,6 +89,18 @@ export async function testConfig() {
   return (r.dids || []).map((d) => ({ did: d.did, sms: d.sms_enabled === '1' || d.sms_available === '1' }));
 }
 
+// ---------------------------------------------------------------- Empresas
+// Cada DID es de una empresa: su «Admin User Group» (vicidial_inbound_dids.user_group). Un usuario solo ve y usa
+// los DIDs de los grupos que puede ver (scope.js); el administrador general, todos.
+const NO_DID = ['-'];
+export async function didsFor(scope, cfg) {
+  if (scope.all) return cfg.dids;
+  const rows = await all('SELECT did_pattern FROM vicidial_inbound_dids WHERE user_group IN (?)', [scope.groups.length ? scope.groups : ['-']]);
+  const mine = new Set(rows.map((r) => normalize(r.did_pattern)));
+  return cfg.dids.filter((d) => mine.has(d));
+}
+const didList = (dids) => (dids && dids.length ? dids : NO_DID);
+
 // ---------------------------------------------------------------- Consultas
 export async function findLead(peer) {
   if (normalize(peer).length < 7) return null;
@@ -108,14 +120,15 @@ async function isDnc(peer) {
   return Number(r.n) > 0;
 }
 
-export async function conversations({ q = '', unreadOnly = false, limit = 200 } = {}) {
+export async function conversations({ q = '', unreadOnly = false, limit = 200, dids } = {}) {
+  const d = didList(dids);
   const rows = await aall(
     `SELECT m.peer, m.did, m.body, m.media, m.direction, m.status, m.created_at, m.lead_id, m.user,
-            (SELECT COUNT(*) FROM sms_messages u WHERE u.peer = m.peer AND u.direction = 'in' AND u.read_at IS NULL) unread
+            (SELECT COUNT(*) FROM sms_messages u WHERE u.peer = m.peer AND u.did IN (?) AND u.direction = 'in' AND u.read_at IS NULL) unread
      FROM sms_messages m
-     JOIN (SELECT peer, MAX(id) id FROM sms_messages GROUP BY peer) last ON last.id = m.id
+     JOIN (SELECT peer, MAX(id) id FROM sms_messages WHERE did IN (?) GROUP BY peer) last ON last.id = m.id
      ORDER BY m.id DESC LIMIT ?`,
-    [limit]
+    [d, d, limit]
   );
   // Nombres de los leads (base de Vicidial, solo lectura)
   const ids = [...new Set(rows.map((r) => r.lead_id).filter(Boolean))];
@@ -133,24 +146,37 @@ export async function conversations({ q = '', unreadOnly = false, limit = 200 } 
     .filter((r) => (!unreadOnly || r.unread > 0) && (!t || `${r.peer} ${r.name} ${r.body}`.toLowerCase().includes(t)));
 }
 
-export async function thread(peer, { afterId = 0 } = {}) {
-  const rows = await aall('SELECT * FROM sms_messages WHERE peer = ? AND id > ? ORDER BY id LIMIT 1000', [normalize(peer), afterId]);
+export async function thread(peer, { afterId = 0, dids } = {}) {
+  const rows = await aall('SELECT * FROM sms_messages WHERE peer = ? AND did IN (?) AND id > ? ORDER BY id LIMIT 1000', [
+    normalize(peer),
+    didList(dids),
+    afterId,
+  ]);
   return rows.map((r) => ({ ...r, media: r.media ? JSON.parse(r.media) : [] }));
 }
 
 /** Mensajes nuevos de todas las conversaciones (sincronización de la app EnVoIP Phone). */
-export async function feed(afterId, limit = 500) {
-  const rows = await aall('SELECT * FROM sms_messages WHERE id > ? ORDER BY id LIMIT ?', [afterId, limit]);
+export async function feed(afterId, { limit = 500, dids } = {}) {
+  const rows = await aall('SELECT * FROM sms_messages WHERE id > ? AND did IN (?) ORDER BY id LIMIT ?', [afterId, didList(dids), limit]);
   return rows.map((r) => ({ ...r, media: r.media ? JSON.parse(r.media) : [] }));
 }
 
-export async function unreadCount() {
-  const r = await aone("SELECT COUNT(*) n FROM sms_messages WHERE direction = 'in' AND read_at IS NULL");
+/** La imagen pertenece a un mensaje de alguno de estos DIDs. */
+export async function mediaVisible(file, dids) {
+  const r = await aone('SELECT id FROM sms_messages WHERE media LIKE ? AND did IN (?) LIMIT 1', [`%media:${file}%`, didList(dids)]);
+  return Boolean(r);
+}
+
+export async function unreadCount(dids) {
+  const r = await aone("SELECT COUNT(*) n FROM sms_messages WHERE direction = 'in' AND read_at IS NULL AND did IN (?)", [didList(dids)]);
   return Number(r.n);
 }
 
-export async function markRead(peer) {
-  await arun("UPDATE sms_messages SET read_at = NOW() WHERE peer = ? AND direction = 'in' AND read_at IS NULL", [normalize(peer)]);
+export async function markRead(peer, dids) {
+  await arun("UPDATE sms_messages SET read_at = NOW() WHERE peer = ? AND did IN (?) AND direction = 'in' AND read_at IS NULL", [
+    normalize(peer),
+    didList(dids),
+  ]);
 }
 
 // ---------------------------------------------------------------- Envío
@@ -158,7 +184,7 @@ export async function markRead(peer) {
  * media: [{ name, data }] con data en base64 (sin prefijo data:).
  * Devuelve el mensaje guardado (con estado sent o failed).
  */
-export async function send({ peer, body, media = [], user, leadId, did, source = 'web' }) {
+export async function send({ peer, body, media = [], user, leadId, did, allowed, preferred, source = 'web' }) {
   const cfg = await getConfig({ withSecrets: true });
   if (!cfg.available || !cfg.enabled) throw new HttpError(400, 'La mensajería SMS no está configurada (Administración → Mensajería SMS)');
   const to = normalize(peer);
@@ -168,8 +194,12 @@ export async function send({ peer, body, media = [], user, leadId, did, source =
   if (text.length > 2000) throw new HttpError(400, 'Mensaje demasiado largo (máx. 2000 caracteres)');
   if (media.length > 3) throw new HttpError(400, 'Máximo 3 imágenes por mensaje');
   if (await isDnc(to)) throw new HttpError(409, 'Este número está en la lista negra (DNC): no se le pueden enviar mensajes');
-  const from = normalize(did) || cfg.defaultDid;
-  if (!cfg.dids.includes(from)) throw new HttpError(400, 'El DID de envío no está configurado');
+  // Número de envío: el elegido, el de la campaña del agente o el primero de su empresa
+  const mine = allowed ?? cfg.dids;
+  if (!mine.length) throw new HttpError(400, 'Tu empresa no tiene ningún número con SMS configurado');
+  const wanted = normalize(did) || (mine.includes(normalize(preferred)) ? normalize(preferred) : '');
+  const from = wanted || (mine.includes(cfg.defaultDid) ? cfg.defaultDid : mine[0]);
+  if (!mine.includes(from)) throw new HttpError(400, 'El DID de envío no está configurado');
 
   // Guardar adjuntos para poder mostrarlos después
   const saved = [];

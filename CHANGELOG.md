@@ -4,6 +4,8 @@
 
 - **Varias empresas:** administradores y supervisores ven solo su empresa (usuarios, campañas, listas, leads,
   llamadas, grabaciones, informes, teléfonos, DIDs, chat), con las reglas de los grupos de usuarios de Vicidial.
+- **SMS/MMS por empresa:** cada usuario ve, recibe y envía solo por los números (DIDs) de su empresa; el agente
+  envía con el número de su campaña.
 - **Acceso:** la contraseña se acepta como en Vicidial (sin espacios ni los símbolos que Vicidial no admite).
 - **Seguridad:** el Vicidial clásico solo se abre desde EnVoip System: la pantalla del agente con cualquier sesión
   abierta y el admin, informes y grabaciones solo con una sesión de administrador. Al cerrar sesión se cierra.
