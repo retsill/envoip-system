@@ -6,6 +6,27 @@ import { clearAgentPass } from '../session.js';
 import { Footer, Logo } from './Brand.jsx';
 import { LangSwitch } from './LangSwitch.jsx';
 import { useT } from '../i18n.js';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faAddressBook,
+  faBan,
+  faBullhorn,
+  faChartColumn,
+  faChartLine,
+  faCircleHalfStroke,
+  faCommentSms,
+  faComments,
+  faGaugeHigh,
+  faHeadset,
+  faMessage,
+  faMicrophoneLines,
+  faMobileScreenButton,
+  faPhone,
+  faPhoneVolume,
+  faRightFromBracket,
+  faUsers,
+  faWindowRestore,
+} from '@fortawesome/free-solid-svg-icons';
 
 // La sesión real del agente vive en vicidial.php. La cargamos en un iframe oculto que se
 // monta una vez y nunca se desmonta al navegar, para no cortar la sesión ni el audio.
@@ -227,39 +248,39 @@ export default function Layout() {
             <Logo variant="onDark" height={40} />
           </div>
           <nav className="nav">
-            {isSup && <NavLink className="menu-item" to="/supervisor"><span aria-hidden>◉</span> {t('Supervisión')}</NavLink>}
-            <NavLink className="menu-item" to="/agente"><span aria-hidden>🎧</span> {t('Agente')}</NavLink>
+            {isSup && <NavLink className="menu-item" to="/supervisor"><FontAwesomeIcon icon={faChartLine} className="nav-icon" fixedWidth /> {t('Supervisión')}</NavLink>}
+            <NavLink className="menu-item" to="/agente"><FontAwesomeIcon icon={faHeadset} className="nav-icon" fixedWidth /> {t('Agente')}</NavLink>
             <NavLink className="menu-item" to="/mensajes">
-              <span aria-hidden>💬</span> {t('Mensajes')} {unread > 0 && <span className="nav-badge">{unread > 99 ? '99+' : unread}</span>}
+              <FontAwesomeIcon icon={faMessage} className="nav-icon" fixedWidth /> {t('Mensajes')} {unread > 0 && <span className="nav-badge">{unread > 99 ? '99+' : unread}</span>}
             </NavLink>
             <NavLink className="menu-item" to="/chat">
-              <span aria-hidden>🗨️</span> {t('Chat interno')} {chatUnread > 0 && <span className="nav-badge nav-badge-alert">{chatUnread}</span>}
+              <FontAwesomeIcon icon={faComments} className="nav-icon" fixedWidth /> {t('Chat interno')} {chatUnread > 0 && <span className="nav-badge nav-badge-alert">{chatUnread}</span>}
             </NavLink>
-            {isSup && <NavLink className="menu-item" to="/leads"><span aria-hidden>☰</span> {t('Leads y listas')}</NavLink>}
+            {isSup && <NavLink className="menu-item" to="/leads"><FontAwesomeIcon icon={faAddressBook} className="nav-icon" fixedWidth /> {t('Leads y listas')}</NavLink>}
             {isAdmin && (
               <>
                 <div className="nav-section menu-item">{t('Administración')}</div>
-                <NavLink className="menu-item" to="/admin" end><span aria-hidden>⚙</span> {t('Resumen')}</NavLink>
-                <NavLink className="menu-item" to="/admin/usuarios"><span aria-hidden>👤</span> {t('Usuarios')}</NavLink>
-                <NavLink className="menu-item" to="/admin/telefonos"><span aria-hidden>☎</span> {t('Teléfonos')}</NavLink>
-                <NavLink className="menu-item" to="/admin/campanas"><span aria-hidden>📣</span> {t('Campañas')}</NavLink>
-                <NavLink className="menu-item" to="/admin/dids"><span aria-hidden>📞</span> {t('Números entrantes')}</NavLink>
-                <NavLink className="menu-item" to="/admin/remotos"><span aria-hidden>📱</span> {t('Agentes remotos')}</NavLink>
-                <NavLink className="menu-item" to="/admin/grabaciones"><span aria-hidden>🎙</span> {t('Grabaciones')}</NavLink>
-                <NavLink className="menu-item" to="/admin/reportes"><span aria-hidden>📊</span> {t('Reportes')}</NavLink>
-                <NavLink className="menu-item" to="/admin/dnc"><span aria-hidden>⛔</span> {t('Lista negra')}</NavLink>
-                <NavLink className="menu-item" to="/admin/sms"><span aria-hidden>✉️</span> {t('Mensajería SMS')}</NavLink>
+                <NavLink className="menu-item" to="/admin" end><FontAwesomeIcon icon={faGaugeHigh} className="nav-icon" fixedWidth /> {t('Resumen')}</NavLink>
+                <NavLink className="menu-item" to="/admin/usuarios"><FontAwesomeIcon icon={faUsers} className="nav-icon" fixedWidth /> {t('Usuarios')}</NavLink>
+                <NavLink className="menu-item" to="/admin/telefonos"><FontAwesomeIcon icon={faPhone} className="nav-icon" fixedWidth /> {t('Teléfonos')}</NavLink>
+                <NavLink className="menu-item" to="/admin/campanas"><FontAwesomeIcon icon={faBullhorn} className="nav-icon" fixedWidth /> {t('Campañas')}</NavLink>
+                <NavLink className="menu-item" to="/admin/dids"><FontAwesomeIcon icon={faPhoneVolume} className="nav-icon" fixedWidth /> {t('Números entrantes')}</NavLink>
+                <NavLink className="menu-item" to="/admin/remotos"><FontAwesomeIcon icon={faMobileScreenButton} className="nav-icon" fixedWidth /> {t('Agentes remotos')}</NavLink>
+                <NavLink className="menu-item" to="/admin/grabaciones"><FontAwesomeIcon icon={faMicrophoneLines} className="nav-icon" fixedWidth /> {t('Grabaciones')}</NavLink>
+                <NavLink className="menu-item" to="/admin/reportes"><FontAwesomeIcon icon={faChartColumn} className="nav-icon" fixedWidth /> {t('Reportes')}</NavLink>
+                <NavLink className="menu-item" to="/admin/dnc"><FontAwesomeIcon icon={faBan} className="nav-icon" fixedWidth /> {t('Lista negra')}</NavLink>
+                <NavLink className="menu-item" to="/admin/sms"><FontAwesomeIcon icon={faCommentSms} className="nav-icon" fixedWidth /> {t('Mensajería SMS')}</NavLink>
               </>
             )}
           </nav>
           <div className="sidebar-foot">
             {classic.mounted && (
               <button className="side-link menu-item" onClick={classic.visible ? ctx.hide : ctx.show}>
-                {classic.visible ? t('Ocultar pantalla clásica') : t('Ver pantalla clásica')}
+                <FontAwesomeIcon icon={faWindowRestore} className="nav-icon" fixedWidth /> {classic.visible ? t('Ocultar pantalla clásica') : t('Ver pantalla clásica')}
               </button>
             )}
             <button className="side-link menu-item" onClick={cycleTheme} title={t('Cambiar tema')}>
-              {t('Tema')}: {t({ auto: 'automático', light: 'claro', dark: 'oscuro' }[theme])}
+              <FontAwesomeIcon icon={faCircleHalfStroke} className="nav-icon" fixedWidth /> {t('Tema')}: {t({ auto: 'automático', light: 'claro', dark: 'oscuro' }[theme])}
             </button>
             <LangSwitch className="menu-item" />
             <div className="me menu-item">
@@ -269,7 +290,7 @@ export default function Layout() {
                 <div className="me-sub">{user.user} · {t('nivel {level}', { level: user.level })}</div>
               </div>
             </div>
-            <button className="side-link menu-item" onClick={fullLogout} disabled={leaving}>{leaving ? t('Cerrando la sesión…') : t('Salir')}</button>
+            <button className="side-link menu-item" onClick={fullLogout} disabled={leaving}><FontAwesomeIcon icon={faRightFromBracket} className="nav-icon" fixedWidth /> {leaving ? t('Cerrando la sesión…') : t('Salir')}</button>
           </div>
         </aside>
         <main className="main">

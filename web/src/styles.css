@@ -611,3 +611,10 @@ td.row-actions { white-space: nowrap; }
 .sms-row:hover .sms-del { opacity: 1; }
 .sms-list { padding-left: 34px; padding-right: 34px; }
 @media (hover: none) { .row-actions, .sms-del { display: none; } }
+
+/* Iconos del menú (Font Awesome) */
+.nav-icon { width: 18px; font-size: 15px; flex: 0 0 18px; opacity: .78; transition: opacity .15s, color .15s; }
+.nav a:hover .nav-icon, .nav a.active .nav-icon, .side-link:hover .nav-icon { opacity: 1; }
+.nav a.active .nav-icon { color: #5fb0ee; }
+.side-link { display: flex; align-items: center; gap: 10px; }
+@media (max-width: 860px) { .nav-icon { font-size: 18px; width: 22px; flex-basis: 22px; } }
