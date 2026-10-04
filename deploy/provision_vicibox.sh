@@ -102,12 +102,21 @@ peer="$1"; keep="$2"
 exit 0
 SH
 chmod 755 /usr/local/bin/envoip-one-leg.sh
+# ViciBox trae System() desactivado (noload => app_system.so): sin él la llamada a la sala se cortaría (con ExecIf
+# solo se salta la protección, pero hace falta para que funcione)
+if grep -q '^noload => app_system.so' /etc/asterisk/modules.conf; then
+  sed -i 's/^noload => app_system.so/;noload => app_system.so  ; EnVoip System: envoip-one-leg.sh usa System()/' /etc/asterisk/modules.conf
+fi
+asterisk -rx 'module load app_system.so' >/dev/null 2>&1 || true
+# Instalaciones anteriores: la regla pasa a ExecIf + TrySystem (si el script falla o System no está cargado, la
+# llamada sigue a la sala en vez de colgarse)
+sed -i -E 's#^exten => _8600XXX,1,(ExecIf\(.*\?)?System\(/usr/local/bin/envoip-one-leg\.sh .*$#'"$(printf '%s' 'exten => _8600XXX,1,ExecIf($["${IFMODULE(app_system.so)}"="1"]?TrySystem(/usr/local/bin/envoip-one-leg.sh "${CHANNEL(peername)}" "${CHANNEL}"))' | sed 's/[&#]/\\&/g')"'#' /etc/asterisk/extensions.conf
 if ! grep -q '^\[envoip-phones\]' /etc/asterisk/extensions.conf; then
   cat >> /etc/asterisk/extensions.conf <<'DIALPLAN'
 
 ; ---- EnVoip System: teléfonos WebRTC (una sola conexión por teléfono en la sala del agente) ----
 [envoip-phones]
-exten => _8600XXX,1,System(/usr/local/bin/envoip-one-leg.sh ${CHANNEL(peername)} ${CHANNEL})
+exten => _8600XXX,1,ExecIf($["${IFMODULE(app_system.so)}"="1"]?TrySystem(/usr/local/bin/envoip-one-leg.sh "${CHANNEL(peername)}" "${CHANNEL}"))
  same => n,Goto(default,${EXTEN},1)
 include => default
 DIALPLAN

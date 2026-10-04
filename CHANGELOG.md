@@ -2,6 +2,9 @@
 
 ## 1.0.2 — 2026-10-02
 
+- **Agentes que pasaban solos a pausa:** la protección de una sola conexión usaba `System()`, que ViciBox trae
+  desactivado, y la llamada del teléfono a la sala se colgaba. Ahora se activa y la regla usa `TrySystem` dentro de
+  `ExecIf`: si algo falla, el teléfono entra igual en la sala.
 - **Varias empresas:** administradores y supervisores ven solo su empresa (usuarios, campañas, listas, leads,
   llamadas, grabaciones, informes, teléfonos, DIDs, chat), con las reglas de los grupos de usuarios de Vicidial.
 - **SMS/MMS por empresa:** cada usuario ve, recibe y envía solo por los números (DIDs) de su empresa; el agente
