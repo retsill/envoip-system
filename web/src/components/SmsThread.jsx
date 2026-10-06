@@ -233,7 +233,7 @@ export default function SmsThread({ peer, leadId, leadName = '', compact = false
             />
             <button className="btn btn-primary" disabled={sending || (!text.trim() && !files.length)}>{sending ? t('Enviando…') : t('Enviar')}</button>
           </div>
-          {editTpl && <TemplatesEditor initial={tpl.templates} onClose={() => setEditTpl(false)} onSaved={(list) => { setTpl((x) => ({ ...x, templates: list })); setEditTpl(false); }} />}
+          {editTpl && <TemplatesEditor initial={tpl.own || tpl.templates} onClose={() => setEditTpl(false)} onSaved={() => { loadTpl(); setEditTpl(false); }} />}
           <div className="sms-count muted small">{t('{n} caracteres', { n: text.length })}{text.length > 160 && ` · ${Math.ceil(text.length / 160)} SMS`}</div>
         </form>
       )}

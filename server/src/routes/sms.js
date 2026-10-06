@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import path from 'node:path';
-import { one } from '../db.js';
+import { all, one } from '../db.js';
 import * as sms from '../sms.js';
 import { requireAuth, requireLevel } from '../auth.js';
 import { assertAll, loadScope, withScope } from '../scope.js';
@@ -168,15 +168,34 @@ const tplKey = (group) => `sms_templates:${group}`;
 router.get(
   '/templates',
   ah(async (req, res) => {
-    const key = tplKey(req.scope.group);
-    const raw = (await getSettings([key]))[key];
-    let list = [];
-    try {
-      list = raw ? JSON.parse(raw) : [];
-    } catch {
-      list = [];
+    // Las del propio grupo y las de los grupos que lo supervisan (la gerencia de la empresa)
+    const managers = await all(
+      "SELECT user_group FROM vicidial_user_groups WHERE CONCAT(' ', admin_viewable_groups, ' ') LIKE CONCAT('% ', ?, ' %')",
+      [req.scope.group]
+    );
+    const groups = [...new Set([req.scope.group, ...managers.map((g) => g.user_group)])];
+    const raw = await getSettings(groups.map(tplKey));
+    const list = [];
+    for (const g of groups) {
+      try {
+        const x = JSON.parse(raw[tplKey(g)] || '[]');
+        if (Array.isArray(x)) list.push(...x);
+      } catch {
+        /* plantilla dañada: se ignora */
+      }
     }
-    res.json({ templates: Array.isArray(list) ? list : [], canEdit: Number(req.user.level) >= 8 });
+    const seen = new Set();
+    res.json({
+      templates: list.filter((x) => !seen.has(x.name) && seen.add(x.name)),
+      own: (() => {
+        try {
+          return JSON.parse(raw[tplKey(req.scope.group)] || '[]');
+        } catch {
+          return [];
+        }
+      })(),
+      canEdit: Number(req.user.level) >= 8,
+    });
   })
 );
 
