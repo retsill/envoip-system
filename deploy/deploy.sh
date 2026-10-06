@@ -20,6 +20,9 @@ chmod 640 "$APP/.env"; chmod 600 "$APP/.credenciales-prueba" 2>/dev/null || true
 # El servicio escribe aquí (imágenes de MMS)
 mkdir -p "$APP/data/sms-media" && chown -R vicimodern:vicimodern "$APP/data"
 
+echo "== Arreglos de Vicidial para PHP 8"
+bash deploy/patch_vicidial_php8.sh
+
 install -m 644 deploy/vicimodern.service /etc/systemd/system/vicimodern.service
 install -m 644 deploy/apache-vicimodern.conf /etc/apache2/conf.d/vicimodern.conf
 

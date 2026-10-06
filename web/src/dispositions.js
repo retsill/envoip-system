@@ -11,7 +11,7 @@ const ES = {
   DROP: 'Agente no disponible', ERI: 'Error del agente', INCALL: 'En llamada', IQNANQ: 'En cola sin agentes: abandonada',
   IVRXFR: 'Saliente desviada a menú IVR', LRERR: 'Error de canal local saliente', LSMERG: 'Lead antiguo fusionado',
   MAXCAL: 'Entrante: máximo de llamadas', MLINAT: 'Multi-lead: desactivado', N: 'No contesta', NA: 'No contesta (automático)',
-  NANQUE: 'Entrante sin agentes ni cola', NEW: 'Nuevo', NI: 'No interesado', NP: 'Sin presentación ni precio',
+  NANQUE: 'Entrante sin agentes ni cola', NEW: 'Nuevo', NI: 'No interesado', NOESP: 'No habla español', NP: 'Sin presentación ni precio',
   PDROP: 'Saliente cortada antes de enrutar', PM: 'Mensaje reproducido', PU: 'Llamada contestada', QCFAIL: 'Rellamada por fallo de calidad',
   QUEUE: 'Pendiente de llamar', QVMAIL: 'Abandono en cola: buzón de voz', RQXFER: 'Vuelta a la cola', SALE: 'Venta',
   SVYCLM: 'Encuesta: enviada a menú', SVYEXT: 'Encuesta: enviada a extensión', SVYHU: 'Encuesta: colgó',
@@ -20,7 +20,11 @@ const ES = {
 };
 
 /** Nombre de una calificación en el idioma de la interfaz. */
+// Calificaciones propias de EnVoip System (en Vicidial se guardan sin tildes)
+const EN = { NOESP: "Doesn't speak Spanish" };
+
 export function dispoName(status, name) {
   if (getLang() === 'es' && ES[status]) return ES[status];
+  if (getLang() !== 'es' && EN[status]) return EN[status];
   return name || status || '—';
 }

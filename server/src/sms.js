@@ -62,7 +62,11 @@ async function voipms(cfg, method, params, post = false) {
     ? await fetch(VOIPMS, { method: 'POST', body: new URLSearchParams(all), signal: AbortSignal.timeout(30000) })
     : await fetch(`${VOIPMS}?${new URLSearchParams(all)}`, { signal: AbortSignal.timeout(20000) });
   const data = await res.json().catch(() => ({ status: `http_${res.status}` }));
-  if (data.status !== 'success') throw new HttpError(502, voipmsError(data.status), { code: data.status });
+  if (data.status !== 'success') {
+    const err = new HttpError(502, voipmsError(data.status), { code: data.status });
+    err.code = data.status;
+    throw err;
+  }
   return data;
 }
 
@@ -81,6 +85,9 @@ function voipmsError(code) {
     }[code] || 'VoIP.ms: {code}'
   );
 }
+
+/** Texto del error con el código de VoIP.ms ya puesto (se guarda en el mensaje y en el registro). */
+const errText = (e) => String(e.message || e).replace(/\{(\w+)\}/g, (m, k) => e.vars?.[k] ?? m);
 
 export async function testConfig() {
   const cfg = await getConfig({ withSecrets: true });
@@ -251,15 +258,17 @@ export async function send({ peer, body, media = [], user, leadId, did, allowed,
       const params = { did: from, dst: to, message: text };
       saved.forEach((s, i) => (params[`media${i + 1}`] = s.data));
       providerId = (await voipms(cfg, 'sendMMS', params, true)).mms;
+    } else if (text.length > 160) {
+      // Un SMS admite 160 caracteres. Trocearlo hacía que llegara solo el primer trozo (VoIP.ms rechaza los
+      // siguientes si van seguidos): los textos largos van como un MMS sin imagen (hasta 2048), que llega entero.
+      providerId = (await voipms(cfg, 'sendMMS', { did: from, dst: to, message: text.slice(0, 2048) }, true)).mms;
     } else {
-      // VoIP.ms admite 160 caracteres por SMS: se trocea
-      for (let i = 0; i < text.length; i += 160) {
-        providerId = (await voipms(cfg, 'sendSMS', { did: from, dst: to, message: text.slice(i, i + 160) })).sms;
-      }
+      providerId = (await voipms(cfg, 'sendSMS', { did: from, dst: to, message: text })).sms;
     }
     await arun("UPDATE sms_messages SET status = 'sent', provider_id = ? WHERE id = ?", [providerId ? `out-${providerId}` : null, id]);
   } catch (e) {
-    await arun("UPDATE sms_messages SET status = 'failed', error = ? WHERE id = ?", [String(e.message).slice(0, 250), id]);
+    console.error(`VoIP.ms envío ${from} → ${to}:`, e.code || errText(e));
+    await arun("UPDATE sms_messages SET status = 'failed', error = ? WHERE id = ?", [errText(e).slice(0, 250), id]);
   }
   const row = await aone('SELECT * FROM sms_messages WHERE id = ?', [id]);
   return { ...row, media: row.media ? JSON.parse(row.media) : [] };
@@ -353,7 +362,7 @@ export async function poll() {
           if (id) added++;
         }
       } catch (e) {
-        if (!/no_sms|no_mms/.test(e.message)) console.error(`VoIP.ms ${method} ${did}:`, e.message);
+        if (!['no_sms', 'no_mms'].includes(e.code)) console.error(`VoIP.ms ${method} ${did}:`, e.code || errText(e));
       }
     }
   }

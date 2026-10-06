@@ -2,6 +2,11 @@
 
 ## 1.0.2 — 2026-10-02
 
+- **Agente atascado cuando el cliente cuelga:** Vicidial con PHP 8 daba un error fatal al cerrar llamadas muy cortas
+  y la pantalla del agente dejaba de responder; `deploy/patch_vicidial_php8.sh` lo corrige en cada despliegue.
+- **SMS largos:** van como un único MMS de texto (antes se troceaban y solo llegaba el primer trozo); se guarda el
+  código de error de VoIP.ms.
+- **Calificación «No habla español»** (`NOESP`).
 - **Agentes que pasaban solos a pausa:** la protección de una sola conexión usaba `System()`, que ViciBox trae
   desactivado, y la llamada del teléfono a la sala se colgaba. Ahora se activa y la regla usa `TrySystem` dentro de
   `ExecIf`: si algo falla, el teléfono entra igual en la sala.
