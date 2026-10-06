@@ -38,11 +38,13 @@ router.get(
   ah(async (req, res) => {
     const cfg = await sms.getConfig();
     const dids = req.smsDids;
+    const own = await one('SELECT p.outbound_cid FROM vicidial_users u JOIN phones p ON p.login = u.phone_login WHERE u.user = ?', [req.user.user]);
+    const mine = sms.normalize(own?.outbound_cid);
     res.json({
       available: cfg.available,
       enabled: cfg.enabled && dids.length > 0,
       dids,
-      defaultDid: dids.includes(cfg.defaultDid) ? cfg.defaultDid : dids[0] || '',
+      defaultDid: dids.includes(mine) ? mine : dids.includes(cfg.defaultDid) ? cfg.defaultDid : dids[0] || '',
     });
   })
 );
@@ -92,14 +94,19 @@ router.post(
   '/send',
   ah(async (req, res) => {
     const b = req.body || {};
-    // Agente en una campaña: el SMS sale por el número (Caller ID) de esa campaña si es de su empresa
-    const camp = await one(
-      'SELECT c.campaign_cid FROM vicidial_live_agents la JOIN vicidial_campaigns c ON c.campaign_id = la.campaign_id WHERE la.user = ?',
+    // Número de envío: el del teléfono del agente (su Caller ID) o, si no es de su empresa, el de su campaña
+    const pref = await one(
+      `SELECT p.outbound_cid phone_cid, c.campaign_cid FROM vicidial_users u
+       LEFT JOIN phones p ON p.login = u.phone_login
+       LEFT JOIN vicidial_live_agents la ON la.user = u.user
+       LEFT JOIN vicidial_campaigns c ON c.campaign_id = la.campaign_id
+       WHERE u.user = ? LIMIT 1`,
       [req.user.user]
     );
+    const preferred = [pref?.phone_cid, pref?.campaign_cid].map(sms.normalize).find((d) => d && req.smsDids.includes(d));
     const msg = await sms.send({
       allowed: req.smsDids,
-      preferred: camp?.campaign_cid,
+      preferred,
       peer: b.peer,
       body: b.body,
       media: Array.isArray(b.media) ? b.media : [],
