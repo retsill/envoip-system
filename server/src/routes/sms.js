@@ -5,6 +5,7 @@ import * as sms from '../sms.js';
 import { requireAuth, requireLevel } from '../auth.js';
 import { assertAll, loadScope, withScope } from '../scope.js';
 import { ah, HttpError } from '../util.js';
+import { getSettings, setSettings } from '../appdb.js';
 
 // ---------------------------------------------------------------- Público (webhook de VoIP.ms)
 export const smsWebhook = Router();
@@ -151,6 +152,37 @@ router.get(
     if (!/^[\w-]+\.(png|jpe?g|gif|webp)$/i.test(file)) throw new HttpError(400, 'archivo no válido');
     if (!(await sms.mediaVisible(file, req.smsDids))) throw new HttpError(404, 'Ruta no encontrada');
     res.sendFile(path.join(sms.MEDIA_DIR, file), { maxAge: '7d' });
+  })
+);
+
+// ---------------------------------------------------------------- Plantillas de mensajes (por empresa)
+// Las guarda el gerente de la empresa (nivel 8+) y las usan sus agentes. {nombre} y {agente} se sustituyen al usarlas.
+const tplKey = (group) => `sms_templates:${group}`;
+router.get(
+  '/templates',
+  ah(async (req, res) => {
+    const key = tplKey(req.scope.group);
+    const raw = (await getSettings([key]))[key];
+    let list = [];
+    try {
+      list = raw ? JSON.parse(raw) : [];
+    } catch {
+      list = [];
+    }
+    res.json({ templates: Array.isArray(list) ? list : [], canEdit: Number(req.user.level) >= 8 });
+  })
+);
+
+router.put(
+  '/templates',
+  requireLevel(8),
+  ah(async (req, res) => {
+    const list = (Array.isArray(req.body?.templates) ? req.body.templates : [])
+      .map((x) => ({ name: String(x?.name ?? '').trim().slice(0, 60), text: String(x?.text ?? '').trim().slice(0, 2000) }))
+      .filter((x) => x.name && x.text)
+      .slice(0, 50);
+    await setSettings({ [tplKey(req.scope.group)]: JSON.stringify(list) });
+    res.json({ ok: true, templates: list });
   })
 );
 

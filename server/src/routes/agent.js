@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { all, one, saleStatuses } from '../db.js';
+import { all, db, one, saleStatuses } from '../db.js';
 import { agentApi } from '../vici.js';
 import { ah, digits, HttpError, str } from '../util.js';
 
@@ -260,5 +260,42 @@ router.post(
 router.post('/recording', action('recording', (b) => ({ value: b.action === 'STOP' ? 'STOP' : 'START' })));
 
 router.post('/logout', action('logout', () => ({ value: 'LOGOUT' })));
+
+// ---------------------------------------------------------------- Rellamadas programadas
+// Vicidial no marca solas las rellamadas «solo para mí» (USERONLY) en campañas automáticas: las muestra en la
+// pantalla clásica, que aquí va oculta. La web las lista y avisa (y marca) cuando llega la hora.
+router.get(
+  '/callbacks',
+  ah(async (req, res) => {
+    const rows = await all(
+      `SELECT cb.callback_id, cb.lead_id, cb.campaign_id, cb.status, cb.recipient, cb.callback_time, cb.comments,
+              cb.callback_time <= NOW() AS due, vl.phone_number, vl.phone_code,
+              TRIM(CONCAT(IFNULL(vl.first_name,''),' ',IFNULL(vl.last_name,''))) AS name
+       FROM vicidial_callbacks cb LEFT JOIN vicidial_list vl ON vl.lead_id = cb.lead_id
+       WHERE cb.user = ? AND cb.status IN ('ACTIVE','LIVE')
+       ORDER BY cb.callback_time LIMIT 200`,
+      [req.user.user]
+    );
+    res.json(rows.map((r) => ({ ...r, due: Boolean(Number(r.due)) })));
+  })
+);
+
+// Marca la rellamada (con el mismo lead, para conservar su historial) y la da por hecha
+router.post(
+  '/callbacks/:id/dial',
+  ah(async (req, res) => {
+    const cb = await one("SELECT callback_id, lead_id FROM vicidial_callbacks WHERE callback_id = ? AND user = ? AND status IN ('ACTIVE','LIVE')", [
+      Number(req.params.id) || 0,
+      req.user.user,
+    ]);
+    if (!cb) throw new HttpError(404, 'Rellamada no encontrada');
+    const message = await agentApi(req.user.user, 'external_dial', { lead_id: cb.lead_id, value: '', search: 'YES', preview: 'NO', focus: 'NO' });
+    // El usuario MySQL de la app solo puede cambiar esta columna (provision_vicibox.sh)
+    await db
+      .query("UPDATE vicidial_callbacks SET status = 'INACTIVE' WHERE callback_id = ? AND user = ?", [cb.callback_id, req.user.user])
+      .catch((e) => console.error('rellamada', e.message));
+    res.json({ ok: true, message });
+  })
+);
 
 export default router;

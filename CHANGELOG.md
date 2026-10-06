@@ -2,6 +2,10 @@
 
 ## 1.0.2 — 2026-10-02
 
+- **Rellamadas:** panel «Mis rellamadas» y aviso con cuenta atrás que marca solo cuando llega la hora (Vicidial no
+  marca solas las rellamadas USERONLY en campañas automáticas).
+- **SMS en la llamada:** botón «Enviar SMS» en la ficha del cliente y plantillas por empresa ({nombre}, {agente}).
+- **SMS largos:** MMS de solo texto por GET (por POST VoIP.ms responde 500).
 - **Agente atascado cuando el cliente cuelga:** Vicidial con PHP 8 daba un error fatal al cerrar llamadas muy cortas
   y la pantalla del agente dejaba de responder; `deploy/patch_vicidial_php8.sh` lo corrige en cada despliegue.
 - **SMS largos:** van como un único MMS de texto (antes se troceaban y solo llegaba el primer trozo); se guarda el

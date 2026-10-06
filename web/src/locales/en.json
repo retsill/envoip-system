@@ -681,5 +681,22 @@
   "Seleccionar": "Select",
   "Borrar mensaje": "Delete message",
   "Borrar {n} mensajes": "Delete {n} messages",
-  "Se borrará para todos los usuarios de tu empresa (web y app). No se puede deshacer.": "It will be deleted for every user in your company (web and app). This can't be undone."
+  "Se borrará para todos los usuarios de tu empresa (web y app). No se puede deshacer.": "It will be deleted for every user in your company (web and app). This can't be undone.",
+  "Mis rellamadas": "My callbacks",
+  "{n} pendientes ahora": "{n} due now",
+  "Llamar ahora": "Call now",
+  "Rellamada programada": "Scheduled callback",
+  "En 10 minutos": "In 10 minutes",
+  "Es la hora de volver a llamar a {who} ({phone}), programada para las {time}.": "It's time to call {who} ({phone}) back, scheduled for {time}.",
+  "Marcando automáticamente en {n} s…": "Dialing automatically in {n} s…",
+  "Enviar SMS": "Send SMS",
+  "Plantillas": "Templates",
+  "Plantillas…": "Templates…",
+  "Editar plantillas…": "Edit templates…",
+  "Plantillas guardadas": "Templates saved",
+  "Plantillas de mensajes": "Message templates",
+  "Las usan todos los agentes de tu empresa. {nombre} se cambia por el nombre del cliente y {agente} por el del agente.": "All agents in your company use them. {nombre} becomes the customer name and {agente} the agent name.",
+  "Nombre (ej.: Saludo de la mañana)": "Name (e.g.: Morning greeting)",
+  "Hola {nombre}, soy {agente} de…": "Hi {nombre}, this is {agente} from…",
+  "Añadir plantilla": "Add template"
 }

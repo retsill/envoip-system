@@ -131,5 +131,6 @@
   "Cola no encontrada": "Queue not found",
   "Número no encontrado": "Number not found",
   "Esta opción es común a todas las empresas: solo la puede cambiar un administrador general": "This setting is shared by all companies: only a general administrator can change it",
-  "No hay nada que borrar": "Nothing to delete"
+  "No hay nada que borrar": "Nothing to delete",
+  "Rellamada no encontrada": "Callback not found"
 }

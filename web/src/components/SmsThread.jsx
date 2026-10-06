@@ -3,6 +3,8 @@ import { api, fmtPhone, post } from '../api.js';
 import { useToast } from './ui.jsx';
 import { useConfirm } from './Modal.jsx';
 import { useLongPress } from './useLongPress.js';
+import { Modal } from './Modal.jsx';
+import { useAuth } from '../App.jsx';
 import { locale, t as tr, useT } from '../i18n.js';
 
 const BASE = import.meta.env.BASE_URL;
@@ -32,8 +34,21 @@ function dayLabel(d) {
  * Conversación SMS/MMS con un número. Si se pasa leadId, carga la conversación del lead.
  * compact: versión para la ficha del cliente del agente.
  */
-export default function SmsThread({ peer, leadId, compact = false, onPeerResolved }) {
+export default function SmsThread({ peer, leadId, leadName = '', compact = false, onPeerResolved }) {
   const t = useT();
+  const { user } = useAuth();
+  const [tpl, setTpl] = useState({ templates: [], canEdit: false });
+  const [editTpl, setEditTpl] = useState(false);
+  const loadTpl = () => api('/sms/templates').then(setTpl, () => {});
+  useEffect(() => {
+    loadTpl();
+  }, []);
+  // {nombre} → nombre del cliente; {agente} → nombre del agente
+  const applyTemplate = (x) => {
+    const first = (leadName || data?.lead?.name || '').trim().split(/\s+/)[0] || '';
+    const agent = (user?.name || user?.user || '').trim().split(/\s+/)[0] || '';
+    setText(x.text.replace(/\{nombre\}/gi, first).replace(/\{agente\}/gi, agent).replace(/\s+([,.!?])/g, '$1').replace(/ {2,}/g, ' '));
+  };
   const toast = useToast();
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -191,6 +206,22 @@ export default function SmsThread({ peer, leadId, compact = false, onPeerResolve
           <div className="sms-compose-row">
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => { setFiles([...files, ...e.target.files].slice(0, 3)); e.target.value = ''; }} />
             <button type="button" className="btn btn-ghost btn-sm" title={t('Adjuntar imagen (MMS)')} onClick={() => fileRef.current?.click()}>🖼</button>
+            {(tpl.templates.length > 0 || tpl.canEdit) && (
+              <select
+                className="sms-tpl"
+                aria-label={t('Plantillas')}
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '__edit') setEditTpl(true);
+                  else if (v !== '') applyTemplate(tpl.templates[Number(v)]);
+                }}
+              >
+                <option value="">{t('Plantillas…')}</option>
+                {tpl.templates.map((x, i) => <option key={i} value={i}>{x.name}</option>)}
+                {tpl.canEdit && <option value="__edit">✎ {t('Editar plantillas…')}</option>}
+              </select>
+            )}
             <textarea
               rows={1}
               value={text}
@@ -202,9 +233,58 @@ export default function SmsThread({ peer, leadId, compact = false, onPeerResolve
             />
             <button className="btn btn-primary" disabled={sending || (!text.trim() && !files.length)}>{sending ? t('Enviando…') : t('Enviar')}</button>
           </div>
+          {editTpl && <TemplatesEditor initial={tpl.templates} onClose={() => setEditTpl(false)} onSaved={(list) => { setTpl((x) => ({ ...x, templates: list })); setEditTpl(false); }} />}
           <div className="sms-count muted small">{t('{n} caracteres', { n: text.length })}{text.length > 160 && ` · ${Math.ceil(text.length / 160)} SMS`}</div>
         </form>
       )}
     </div>
+  );
+}
+
+// Plantillas de la empresa: las edita el gerente (nivel 8+)
+function TemplatesEditor({ initial, onClose, onSaved }) {
+  const t = useT();
+  const toast = useToast();
+  const [list, setList] = useState(initial.length ? initial : [{ name: '', text: '' }]);
+  const [saving, setSaving] = useState(false);
+  const set = (i, k, v) => setList((l) => l.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const save = async () => {
+    setSaving(true);
+    try {
+      const r = await api('/sms/templates', { method: 'PUT', body: { templates: list } });
+      toast(t('Plantillas guardadas'));
+      onSaved(r.templates);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <Modal
+      title={t('Plantillas de mensajes')}
+      icon="✎"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>{t('Cancelar')}</button>
+          <button className="btn btn-primary" disabled={saving} onClick={save}>{t('Guardar')}</button>
+        </>
+      }
+    >
+      <p className="muted small">{t('Las usan todos los agentes de tu empresa. {nombre} se cambia por el nombre del cliente y {agente} por el del agente.')}</p>
+      <div className="stack">
+        {list.map((x, i) => (
+          <fieldset className="fgroup" key={i}>
+            <div className="tpl-row">
+              <input placeholder={t('Nombre (ej.: Saludo de la mañana)')} value={x.name} onChange={(e) => set(i, 'name', e.target.value)} />
+              <button type="button" className="btn btn-ghost btn-sm" title={t('Quitar')} onClick={() => setList((l) => l.filter((_, j) => j !== i))}>✕</button>
+            </div>
+            <textarea rows={3} placeholder={t('Hola {nombre}, soy {agente} de…')} value={x.text} onChange={(e) => set(i, 'text', e.target.value)} />
+          </fieldset>
+        ))}
+        <button type="button" className="btn btn-sm" onClick={() => setList((l) => [...l, { name: '', text: '' }])}>＋ {t('Añadir plantilla')}</button>
+      </div>
+    </Modal>
   );
 }

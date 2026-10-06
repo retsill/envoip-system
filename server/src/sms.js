@@ -261,7 +261,8 @@ export async function send({ peer, body, media = [], user, leadId, did, allowed,
     } else if (text.length > 160) {
       // Un SMS admite 160 caracteres. Trocearlo hacía que llegara solo el primer trozo (VoIP.ms rechaza los
       // siguientes si van seguidos): los textos largos van como un MMS sin imagen (hasta 2048), que llega entero.
-      providerId = (await voipms(cfg, 'sendMMS', { did: from, dst: to, message: text.slice(0, 2048) }, true)).mms;
+      // Sin imagen va por GET: por POST VoIP.ms responde 500 si no hay adjunto
+      providerId = (await voipms(cfg, 'sendMMS', { did: from, dst: to, message: text.slice(0, 2048) })).mms;
     } else {
       providerId = (await voipms(cfg, 'sendSMS', { did: from, dst: to, message: text })).sms;
     }

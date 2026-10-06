@@ -296,6 +296,8 @@ fi
 # Única escritura directa en Vicidial: tres opciones de agente que su API no permite cambiar
 # (sin ellas los agentes nuevos quedan solo para entrantes y la marcación automática no les llama).
 q "GRANT UPDATE (agent_choose_ingroups, agent_choose_blended, closer_default_blended, agentcall_manual) ON asterisk.vicidial_users TO 'modern_ro'@'localhost'"
+# Rellamadas: la web da por hecha la rellamada que marca el agente (solo la columna status)
+q "GRANT UPDATE (status) ON asterisk.vicidial_callbacks TO 'modern_ro'@'localhost'"
 mkdir -p "$APP/data/sms-media" && chown -R vicimodern:vicimodern "$APP/data" 2>/dev/null || true
 # Permisos que usa el admin moderno. Las opciones que OCULTAN datos (hide/block) se dejan en 0.
 COLS=$(q "SELECT column_name FROM information_schema.columns WHERE table_schema='asterisk' AND table_name='vicidial_users'

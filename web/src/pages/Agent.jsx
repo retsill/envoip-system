@@ -327,6 +327,7 @@ function Console({ data, refresh, fetchedAt, error, onChangeCampaign }) {
           ) : (
             <Dialer paused={paused} act={act} busy={busy} />
           )}
+          <CallbacksCard act={act} busy={busy} />
           <Card title={t('Tu día')}>
             <StatsGrid stats={stats} />
           </Card>
@@ -344,7 +345,117 @@ function Console({ data, refresh, fetchedAt, error, onChangeCampaign }) {
         </div>
       </div>
       {campModal && <CampaignModal current={agent.campaign_id} onChange={onChangeCampaign} onClose={() => setCampModal(false)} />}
+      {!onCall && !hasLead && agent.status !== 'DISPO' && <CallbackPrompt act={act} />}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------- Rellamadas programadas
+const SNOOZE_KEY = 'envoip.cbSnooze';
+function snoozed() {
+  try {
+    return JSON.parse(localStorage.getItem(SNOOZE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+function snooze(id, minutes) {
+  try {
+    const s = snoozed();
+    s[id] = Date.now() + minutes * 60000;
+    localStorage.setItem(SNOOZE_KEY, JSON.stringify(s));
+  } catch {
+    /* sin almacenamiento: solo se pospone en esta pantalla */
+  }
+}
+const fmtWhen = (d) => {
+  const x = new Date(String(d).replace(' ', 'T'));
+  const today = new Date().toDateString() === x.toDateString();
+  return today ? x.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : x.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+};
+
+function CallbacksCard({ act, busy }) {
+  const t = useT();
+  const { data, refresh } = usePoll('/agent/callbacks', 30000);
+  if (!data || data.length === 0) return null;
+  const due = data.filter((c) => c.due).length;
+  return (
+    <Card title={<>{t('Mis rellamadas')} {due > 0 && <span className="chip chip-red">{t('{n} pendientes ahora', { n: due })}</span>}</>} pad={false}>
+      <ul className="recent-list">
+        {data.map((c) => (
+          <li key={c.callback_id}>
+            <button
+              className={`recent${c.due ? ' cb-due' : ''}`}
+              disabled={!!busy}
+              title={t('Llamar ahora')}
+              onClick={() => act('cb', `/agent/callbacks/${c.callback_id}/dial`, {}, t('Llamando a {who}…', { who: c.name || fmtPhone(c.phone_number) })).then(refresh)}
+            >
+              <span className="recent-dir out" aria-hidden>{c.due ? '⏰' : '🕒'}</span>
+              <span className="recent-main">
+                <span className="strong">{c.name || fmtPhone(c.phone_number)}</span>
+                <span className="sub">
+                  <span className="mono">{fmtPhone(c.phone_number)}</span> · {c.campaign_id}
+                  {c.comments ? ` · ${c.comments}` : ''}
+                </span>
+              </span>
+              <span className="recent-time mono">{fmtWhen(c.callback_time)}</span>
+              <span className="recent-call" aria-hidden>📞</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+// Cuando llega la hora de una rellamada y el agente no está en llamada: aviso con cuenta atrás que marca solo
+function CallbackPrompt({ act }) {
+  const t = useT();
+  const { data, refresh } = usePoll('/agent/callbacks', 15000);
+  const [count, setCount] = useState(10);
+  const [hidden, setHidden] = useState(0);
+  const sn = snoozed();
+  const cb = (data || []).find((c) => c.due && !(sn[c.callback_id] > Date.now()));
+  useEffect(() => setCount(10), [cb?.callback_id]);
+  useEffect(() => {
+    if (!cb) return undefined;
+    if (count <= 0) {
+      dial();
+      return undefined;
+    }
+    const id = setTimeout(() => setCount((c) => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [cb?.callback_id, count]);
+  if (!cb) return null;
+  const who = cb.name || fmtPhone(cb.phone_number);
+  function dial() {
+    snooze(cb.callback_id, 2); // evita repetir mientras Vicidial la da por hecha
+    act('cb', `/agent/callbacks/${cb.callback_id}/dial`, {}, t('Llamando a {who}…', { who })).then(refresh);
+    setHidden((h) => h + 1);
+  }
+  const later = (m) => {
+    snooze(cb.callback_id, m);
+    setHidden((h) => h + 1);
+  };
+  return (
+    <Modal
+      key={`${cb.callback_id}-${hidden}`}
+      title={t('Rellamada programada')}
+      icon="⏰"
+      onClose={() => later(10)}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={() => later(10)}>{t('En 10 minutos')}</button>
+          <button className="btn btn-success" data-autofocus="" onClick={dial}>📞 {t('Llamar ahora')}</button>
+        </>
+      }
+    >
+      <p className="modal-text">
+        {t('Es la hora de volver a llamar a {who} ({phone}), programada para las {time}.', { who, phone: fmtPhone(cb.phone_number), time: fmtWhen(cb.callback_time) })}
+      </p>
+      {cb.comments && <p className="muted">{cb.comments}</p>}
+      <p className="strong">{t('Marcando automáticamente en {n} s…', { n: count })}</p>
+    </Modal>
   );
 }
 
@@ -459,6 +570,9 @@ function LeadCard({ lead, run, busy }) {
           <span>
             <span className="lead-name">{name}</span>
             <span className="sub mono">+{lead.phone_code} {fmtPhone(lead.phone_number)} · {t('lead #{id} · lista {list} · {n} llamadas', { id: lead.lead_id, list: lead.list_id, n: lead.called_count })}</span>
+            {sms?.enabled && tab !== 'sms' && (
+              <button className="btn btn-primary btn-sm lead-sms" onClick={() => setTab('sms')}>💬 {t('Enviar SMS')}</button>
+            )}
           </span>
         </span>
       }
@@ -479,7 +593,7 @@ function LeadCard({ lead, run, busy }) {
         </>
       }
     >
-      {tab === 'sms' ? <SmsThread leadId={lead.lead_id} compact /> : <>
+      {tab === 'sms' ? <SmsThread leadId={lead.lead_id} leadName={lead.first_name || ''} compact /> : <>
       {FIELD_GROUPS.map(([group, fields]) => (
         <fieldset className="fgroup" key={group}>
           <legend>{t(group)}</legend>

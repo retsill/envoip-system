@@ -618,3 +618,10 @@ td.row-actions { white-space: nowrap; }
 .nav a.active .nav-icon { color: #5fb0ee; }
 .side-link { display: flex; align-items: center; gap: 10px; }
 @media (max-width: 860px) { .nav-icon { font-size: 18px; width: 22px; flex-basis: 22px; } }
+
+/* Rellamadas y SMS en la ficha */
+.recent.cb-due { background: color-mix(in srgb, var(--red) 10%, transparent); }
+.lead-sms { margin-left: 10px; vertical-align: middle; }
+.sms-tpl { max-width: 150px; }
+.tpl-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.tpl-row input { flex: 1; }
