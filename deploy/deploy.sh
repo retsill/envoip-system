@@ -25,6 +25,7 @@ bash deploy/patch_vicidial_php8.sh
 
 install -m 644 deploy/vicimodern.service /etc/systemd/system/vicimodern.service
 install -m 644 deploy/apache-vicimodern.conf /etc/apache2/conf.d/vicimodern.conf
+install -m 644 deploy/apache-envoip-php.conf /etc/apache2/conf.d/envoip-php.conf
 
 # Acceso: dominio único y Vicidial clásico solo con sesión en EnVoip System (deploy/apache-envoip-gate.conf)
 GATE_DIR=/var/lib/envoip-gate
