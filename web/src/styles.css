@@ -628,3 +628,9 @@ td.row-actions { white-space: nowrap; }
 
 /* Mis rellamadas: 5 visibles y el resto con scroll, como las llamadas recientes */
 .recent-list.cb-list { max-height: calc(var(--recent-row) * 5); }
+
+/* Mensajes y chat interno: 10 conversaciones a la vista y el resto con scroll (la página no se alarga) */
+.conv-list { --conv-row: 58px; flex: 0 1 auto; max-height: calc(var(--conv-row) * 10 + 12px); overscroll-behavior: contain; }
+.inbox { align-items: start; }
+.inbox-thread { height: calc(var(--conv-row, 58px) * 10 + 120px); min-height: 560px; }
+@media (max-width: 860px) { .inbox-thread { height: 72dvh; min-height: 0; } .conv-list { max-height: 38dvh; } }
