@@ -211,6 +211,34 @@ export async function markRead(peer, dids) {
   ]);
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Trozos de hasta 160 caracteres sin partir palabras. */
+export function splitSms(text, size = 160) {
+  const parts = [];
+  let rest = String(text).trim();
+  while (rest.length > size) {
+    let cut = rest.lastIndexOf(' ', size);
+    if (cut < size * 0.6) cut = size;
+    parts.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) parts.push(rest);
+  return parts;
+}
+
+/** sendSMS con un reintento si VoIP.ms tarda o falla en su lado (timeout, 5xx de Cloudflare/servidor). */
+async function sendWithRetry(cfg, params) {
+  try {
+    return await voipms(cfg, 'sendSMS', params);
+  } catch (e) {
+    const transient = e.name === 'TimeoutError' || /timeout|aborted/i.test(String(e.message)) || /^http_5/.test(e.code || '');
+    if (!transient) throw e;
+    await sleep(3000);
+    return voipms(cfg, 'sendSMS', params);
+  }
+}
+
 // ---------------------------------------------------------------- Envío
 /**
  * media: [{ name, data }] con data en base64 (sin prefijo data:).
@@ -223,7 +251,7 @@ export async function send({ peer, body, media = [], user, leadId, did, allowed,
   if (to.length < 10) throw new HttpError(400, 'Número de destino no válido (10 dígitos)');
   const text = String(body ?? '').trim();
   if (!text && !media.length) throw new HttpError(400, 'El mensaje está vacío');
-  if (text.length > 2000) throw new HttpError(400, 'Mensaje demasiado largo (máx. 2000 caracteres)');
+  if (text.length > 1000) throw new HttpError(400, 'Mensaje demasiado largo (máx. 1000 caracteres)');
   if (media.length > 3) throw new HttpError(400, 'Máximo 3 imágenes por mensaje');
   if (await isDnc(to)) throw new HttpError(409, 'Este número está en la lista negra (DNC): no se le pueden enviar mensajes');
   // Número de envío: el elegido, el de la campaña del agente o el primero de su empresa
@@ -258,13 +286,19 @@ export async function send({ peer, body, media = [], user, leadId, did, allowed,
       const params = { did: from, dst: to, message: text };
       saved.forEach((s, i) => (params[`media${i + 1}`] = s.data));
       providerId = (await voipms(cfg, 'sendMMS', params, true)).mms;
-    } else if (text.length > 160) {
-      // Un SMS admite 160 caracteres. Trocearlo hacía que llegara solo el primer trozo (VoIP.ms rechaza los
-      // siguientes si van seguidos): los textos largos van como un MMS sin imagen (hasta 2048), que llega entero.
-      // Sin imagen va por GET: por POST VoIP.ms responde 500 si no hay adjunto
-      providerId = (await voipms(cfg, 'sendMMS', { did: from, dst: to, message: text.slice(0, 2048) })).mms;
     } else {
-      providerId = (await voipms(cfg, 'sendSMS', { did: from, dst: to, message: text })).sms;
+      // Texto: SMS de hasta 160 caracteres (cortados por palabras), uno tras otro con una pausa. Los MMS de solo texto
+      // los aceptaba VoIP.ms pero los operadores no los entregaban («undelivered»); los SMS sí llegan.
+      const parts = splitSms(text);
+      for (const [i, part] of parts.entries()) {
+        if (i > 0) await sleep(1500);
+        try {
+          providerId = (await sendWithRetry(cfg, { did: from, dst: to, message: part })).sms;
+        } catch (e) {
+          if (i > 0) e.message = `${errText(e)} (enviadas ${i} de ${parts.length} partes)`;
+          throw e;
+        }
+      }
     }
     await arun("UPDATE sms_messages SET status = 'sent', provider_id = ? WHERE id = ?", [providerId ? `out-${providerId}` : null, id]);
   } catch (e) {

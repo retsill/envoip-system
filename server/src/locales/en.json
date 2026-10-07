@@ -132,5 +132,6 @@
   "Número no encontrado": "Number not found",
   "Esta opción es común a todas las empresas: solo la puede cambiar un administrador general": "This setting is shared by all companies: only a general administrator can change it",
   "No hay nada que borrar": "Nothing to delete",
-  "Rellamada no encontrada": "Callback not found"
+  "Rellamada no encontrada": "Callback not found",
+  "Mensaje demasiado largo (máx. 1000 caracteres)": "Message too long (max. 1000 characters)"
 }
