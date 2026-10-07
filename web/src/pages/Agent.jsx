@@ -316,6 +316,7 @@ function Console({ data, refresh, fetchedAt, error, onChangeCampaign }) {
                   </div>
                 </div>
               </Card>
+              <CallbacksCard act={act} busy={busy} />
               <RecentCalls act={act} busy={busy} />
             </>
           )}
@@ -327,7 +328,6 @@ function Console({ data, refresh, fetchedAt, error, onChangeCampaign }) {
           ) : (
             <Dialer paused={paused} act={act} busy={busy} />
           )}
-          <CallbacksCard act={act} busy={busy} />
           <Card title={t('Tu día')}>
             <StatsGrid stats={stats} />
           </Card>
@@ -381,7 +381,7 @@ function CallbacksCard({ act, busy }) {
   const due = data.filter((c) => c.due).length;
   return (
     <Card title={<>{t('Mis rellamadas')} {due > 0 && <span className="chip chip-red">{t('{n} pendientes ahora', { n: due })}</span>}</>} pad={false}>
-      <ul className="recent-list">
+      <ul className="recent-list cb-list">
         {data.map((c) => (
           <li key={c.callback_id}>
             <button

@@ -625,3 +625,6 @@ td.row-actions { white-space: nowrap; }
 .sms-tpl { max-width: 150px; }
 .tpl-row { display: flex; gap: 6px; margin-bottom: 6px; }
 .tpl-row input { flex: 1; }
+
+/* Mis rellamadas: 5 visibles y el resto con scroll, como las llamadas recientes */
+.recent-list.cb-list { max-height: calc(var(--recent-row) * 5); }
