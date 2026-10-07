@@ -264,15 +264,32 @@ router.post('/logout', action('logout', () => ({ value: 'LOGOUT' })));
 // ---------------------------------------------------------------- Rellamadas programadas
 // Vicidial no marca solas las rellamadas «solo para mí» (USERONLY) en campañas automáticas: las muestra en la
 // pantalla clásica, que aquí va oculta. La web las lista y avisa (y marca) cuando llega la hora.
+// Una rellamada está hecha si al cliente se le llamó (saliente o entrante) después de programarla, o si ya no
+// está marcado para rellamar (otra calificación). Vicidial solo las cierra si se califica con otra rellamada.
+const CB_DONE = `(vl.status NOT IN ('CALLBK','CBHOLD')
+  OR EXISTS (SELECT 1 FROM vicidial_log l WHERE l.lead_id = cb.lead_id AND l.call_date > cb.entry_time)
+  OR EXISTS (SELECT 1 FROM vicidial_closer_log l WHERE l.lead_id = cb.lead_id AND l.call_date > cb.entry_time))`;
+
 router.get(
   '/callbacks',
   ah(async (req, res) => {
+    // Cerrar las ya hechas (el usuario MySQL de la app solo puede cambiar status)
+    const done = await all(
+      `SELECT cb.callback_id FROM vicidial_callbacks cb JOIN vicidial_list vl ON vl.lead_id = cb.lead_id
+       WHERE cb.user = ? AND cb.status IN ('ACTIVE','LIVE') AND ${CB_DONE}`,
+      [req.user.user]
+    );
+    if (done.length) {
+      await db
+        .query("UPDATE vicidial_callbacks SET status = 'INACTIVE' WHERE callback_id IN (?) AND user = ?", [done.map((r) => r.callback_id), req.user.user])
+        .catch((e) => console.error('rellamadas hechas', e.message));
+    }
     const rows = await all(
       `SELECT cb.callback_id, cb.lead_id, cb.campaign_id, cb.status, cb.recipient, cb.callback_time, cb.comments,
               cb.callback_time <= NOW() AS due, vl.phone_number, vl.phone_code,
               TRIM(CONCAT(IFNULL(vl.first_name,''),' ',IFNULL(vl.last_name,''))) AS name
        FROM vicidial_callbacks cb LEFT JOIN vicidial_list vl ON vl.lead_id = cb.lead_id
-       WHERE cb.user = ? AND cb.status IN ('ACTIVE','LIVE')
+       WHERE cb.user = ? AND cb.status IN ('ACTIVE','LIVE') AND vl.lead_id IS NOT NULL AND NOT ${CB_DONE}
        ORDER BY cb.callback_time LIMIT 200`,
       [req.user.user]
     );
