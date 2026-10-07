@@ -59,6 +59,28 @@ function Lists({ lists, campaigns, reload, openLeads }) {
 
   return (
     <div className="stack">
+      <Card title={t('Nueva lista')}>
+        {campaigns.length === 0 ? (
+          <p className="muted">{t('Primero crea una campaña en el panel de administración de Vicidial (Campaigns → Add a New Campaign).')}</p>
+        ) : (
+          <form onSubmit={create} className="new-list">
+            <label className="field"><span>{t('ID de lista (solo números)')}</span>
+              <input required inputMode="numeric" value={f.list_id} onChange={(e) => setF({ ...f, list_id: e.target.value.replace(/\D/g, '') })} />
+            </label>
+            <label className="field"><span>{t('Nombre')}</span>
+              <input required maxLength={30} value={f.list_name} onChange={(e) => setF({ ...f, list_name: e.target.value })} />
+            </label>
+            <label className="field"><span>{t('Campaña')}</span>
+              <select required value={f.campaign_id} onChange={(e) => setF({ ...f, campaign_id: e.target.value })}>
+                <option value="">{t('Elige…')}</option>
+                {campaigns.map((c) => <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_id} · {c.campaign_name}</option>)}
+              </select>
+            </label>
+            <label className="check"><input type="checkbox" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} /> {t('Activa')}</label>
+            <button className="btn btn-primary" disabled={!!busy}>{t('Crear lista')}</button>
+          </form>
+        )}
+      </Card>
       <Card title={t('Listas')} pad={false}>
         {!lists ? <div className="card-body muted">{t('Cargando…')}</div> : lists.length === 0 ? (
           <Empty icon="☰" title={t('No hay listas')} />
@@ -88,28 +110,6 @@ function Lists({ lists, campaigns, reload, openLeads }) {
         )}
       </Card>
       {editing && <ListDrawer list={editing} campaigns={campaigns} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); reload(); }} />}
-      <Card title={t('Nueva lista')}>
-        {campaigns.length === 0 ? (
-          <p className="muted">{t('Primero crea una campaña en el panel de administración de Vicidial (Campaigns → Add a New Campaign).')}</p>
-        ) : (
-          <form onSubmit={create} className="new-list">
-            <label className="field"><span>{t('ID de lista (solo números)')}</span>
-              <input required inputMode="numeric" value={f.list_id} onChange={(e) => setF({ ...f, list_id: e.target.value.replace(/\D/g, '') })} />
-            </label>
-            <label className="field"><span>{t('Nombre')}</span>
-              <input required maxLength={30} value={f.list_name} onChange={(e) => setF({ ...f, list_name: e.target.value })} />
-            </label>
-            <label className="field"><span>{t('Campaña')}</span>
-              <select required value={f.campaign_id} onChange={(e) => setF({ ...f, campaign_id: e.target.value })}>
-                <option value="">{t('Elige…')}</option>
-                {campaigns.map((c) => <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_id} · {c.campaign_name}</option>)}
-              </select>
-            </label>
-            <label className="check"><input type="checkbox" checked={f.active} onChange={(e) => setF({ ...f, active: e.target.checked })} /> {t('Activa')}</label>
-            <button className="btn btn-primary" disabled={!!busy}>{t('Crear lista')}</button>
-          </form>
-        )}
-      </Card>
     </div>
   );
 }
