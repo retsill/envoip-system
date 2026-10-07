@@ -213,17 +213,43 @@ export async function markRead(peer, dids) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Trozos de hasta 160 caracteres sin partir palabras. */
-export function splitSms(text, size = 160) {
+/**
+ * Texto apto para SMS: VoIP.ms admite 160 caracteres solo en texto simple; con tildes, «ñ» o emojis el límite baja a 70
+ * y rechaza el trozo (sms_toolong). Se quitan tildes (campaña → campana) como es habitual en SMS.
+ */
+export function smsText(text) {
+  return String(text)
+    .replace(/[¿¡]/g, '')
+    .replace(/[“”«»]/g, '"')
+    .replace(/[‘’´`]/g, "'")
+    .replace(/[–—]/g, '-')
+    .replace(/…/g, '...')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+const isPlain = (t) => /^[\x20-\x7e\r\n]*$/.test(t);
+
+/** Trozos de hasta 160 caracteres (70 los que lleven algún carácter especial, p. ej. emojis) sin partir palabras. */
+export function splitSms(text) {
   const parts = [];
-  let rest = String(text).trim();
-  while (rest.length > size) {
-    let cut = rest.lastIndexOf(' ', size);
-    if (cut < size * 0.6) cut = size;
-    parts.push(rest.slice(0, cut).trim());
-    rest = rest.slice(cut).trim();
+  let cur = '';
+  for (const w of String(text).trim().split(/\s+/).filter(Boolean)) {
+    const cand = cur ? `${cur} ${w}` : w;
+    if (cand.length <= (isPlain(cand) ? 160 : 70)) {
+      cur = cand;
+      continue;
+    }
+    if (cur) parts.push(cur);
+    let rest = w;
+    const lim = isPlain(w) ? 160 : 70;
+    while (rest.length > lim) {
+      parts.push(rest.slice(0, lim));
+      rest = rest.slice(lim);
+    }
+    cur = rest;
   }
-  if (rest) parts.push(rest);
+  if (cur) parts.push(cur);
   return parts;
 }
 
@@ -289,7 +315,7 @@ export async function send({ peer, body, media = [], user, leadId, did, allowed,
     } else {
       // Texto: SMS de hasta 160 caracteres (cortados por palabras), uno tras otro con una pausa. Los MMS de solo texto
       // los aceptaba VoIP.ms pero los operadores no los entregaban («undelivered»); los SMS sí llegan.
-      const parts = splitSms(text);
+      const parts = splitSms(smsText(text));
       for (const [i, part] of parts.entries()) {
         if (i > 0) await sleep(1500);
         try {
@@ -408,5 +434,6 @@ export function startPolling() {
   if (!appEnabled) return;
   const run = () => poll().catch((e) => console.error('Consulta SMS:', e.message));
   setTimeout(run, 10_000);
-  setInterval(run, 60_000);
+  // Los mensajes llegan al momento por el webhook; la consulta solo recoge los que se hubieran perdido
+  setInterval(run, 5 * 60_000);
 }
