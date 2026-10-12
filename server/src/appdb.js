@@ -64,6 +64,15 @@ export async function migrate() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
   // Borrado: el mensaje se marca (no se elimina) para que la consulta a VoIP.ms no lo vuelva a traer
   await arun('ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS deleted_at DATETIME NULL, ADD COLUMN IF NOT EXISTS deleted_by VARCHAR(20) NULL');
+  // Estado de entrega que informa VoIP.ms (carrier_status) y tipo de línea aprendido de él (fijo / móvil)
+  await arun('ALTER TABLE sms_messages ADD COLUMN IF NOT EXISTS delivery VARCHAR(80) NULL');
+  await arun(`
+    CREATE TABLE IF NOT EXISTS sms_numbers (
+      peer VARCHAR(20) NOT NULL PRIMARY KEY,
+      line_type ENUM('mobile','landline') NOT NULL,
+      detail VARCHAR(80) NOT NULL DEFAULT '',
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
   await arun('ALTER TABLE sms_messages ADD INDEX IF NOT EXISTS k_deleted (deleted_at)');
 }
 

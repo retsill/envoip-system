@@ -77,7 +77,13 @@ router.get(
       'SELECT (SELECT COUNT(*) FROM vicidial_dnc WHERE phone_number = ?) + (SELECT COUNT(*) FROM vicidial_campaign_dnc WHERE phone_number = ?) n',
       [peer, peer]
     );
-    res.json({ peer, lead: info, dnc: Number(dnc.n) > 0, messages: await sms.thread(peer, { afterId: Number(req.query.after || 0), dids: req.smsDids }) });
+    res.json({
+      peer,
+      lead: info,
+      dnc: Number(dnc.n) > 0,
+      lineType: await sms.lineType(peer),
+      messages: await sms.thread(peer, { afterId: Number(req.query.after || 0), dids: req.smsDids }),
+    });
   })
 );
 
@@ -88,7 +94,7 @@ router.get(
     const lead = await one('SELECT lead_id, phone_number, alt_phone FROM vicidial_list WHERE lead_id = ?', [req.params.leadId]);
     if (!lead) throw new HttpError(404, 'Lead no encontrado');
     const peer = sms.normalize(lead.phone_number);
-    res.json({ peer, messages: await sms.thread(peer, { dids: req.smsDids }) });
+    res.json({ peer, lineType: await sms.lineType(peer), messages: await sms.thread(peer, { dids: req.smsDids }) });
   })
 );
 
@@ -130,6 +136,16 @@ router.post(
     const peers = Array.isArray(b.peers) ? b.peers : [];
     if (!ids.length && !peers.length) throw new HttpError(400, 'No hay nada que borrar');
     res.json({ deleted: await sms.remove({ ids, peers, dids: req.smsDids, user: req.user.user }) });
+  })
+);
+
+// Tipo de línea de un número (fijo / móvil / desconocido), para avisar al agente antes de escribir
+router.get(
+  '/line',
+  ah(async (req, res) => {
+    const peer = sms.normalize(req.query.peer);
+    if (!peer) throw new HttpError(400, 'Falta el número');
+    res.json({ peer, lineType: await sms.lineType(peer) });
   })
 );
 

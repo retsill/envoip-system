@@ -170,6 +170,11 @@ export default function SmsThread({ peer, leadId, leadName = '', compact = false
           {mine && m.source === 'stop' && <> · {t('respuesta automática')}</>}
           {mine && (m.status === 'sent' ? ' ✓' : m.status === 'queued' ? ' …' : '')}
           {m.status === 'failed' && <span className="warn"> · {t('No enviado: {error}', { error: m.error })}</span>}
+          {mine && m.status === 'sent' && m.delivery && (
+            /delivered/i.test(m.delivery)
+              ? <span className="ok"> · {t('entregado')}</span>
+              : <span className="warn"> · {/invalid[- ]destination/i.test(m.delivery) ? t('no entregado: es un teléfono fijo') : t('no entregado ({reason})', { reason: m.delivery })}</span>
+          )}
         </div>
       </div>
     );
@@ -177,6 +182,9 @@ export default function SmsThread({ peer, leadId, leadName = '', compact = false
 
   return (
     <div className={`sms-thread ${compact ? 'compact' : ''}`}>
+      {data.lineType === 'landline' && !data.dnc && (
+        <div className="alert alert-warn">📵 {t('Este número es un teléfono fijo: no recibe SMS. Llama al cliente o pídele un número de móvil.')}</div>
+      )}
       {data.dnc && <div className="alert alert-warn">⛔ {t('Este número está en la lista negra (se dio de baja): no se le pueden enviar mensajes.')}</div>}
       {selecting && (
         <div className="select-bar">
@@ -191,7 +199,7 @@ export default function SmsThread({ peer, leadId, leadName = '', compact = false
       <div className="sms-list" ref={listRef}>
         {items.length ? items : <div className="empty"><div className="empty-icon">💬</div><div className="empty-title">{t('Sin mensajes con {phone}', { phone: fmtPhone(data.peer) })}</div><div className="empty-text">{t('Escribe el primero abajo.')}</div></div>}
       </div>
-      {!data.dnc && (
+      {!data.dnc && data.lineType !== 'landline' && (
         <form className="sms-compose" onSubmit={send}>
           {files.length > 0 && (
             <div className="sms-files">

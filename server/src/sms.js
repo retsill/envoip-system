@@ -112,6 +112,55 @@ export async function didsFor(scope, cfg) {
 const didList = (dids) => (dids && dids.length ? dids : NO_DID);
 
 // ---------------------------------------------------------------- Consultas
+// ---------------------------------------------------------------- Tipo de línea (fijo / móvil)
+// Se aprende de la respuesta de entrega de VoIP.ms: «invalid-destination-address» = fijo (no recibe SMS);
+// «delivered» = móvil. No hace falta un servicio de pago de consulta de líneas.
+const LANDLINE_RE = /invalid[- ]destination|landline|not sms[- ]capable|non[- ]mobile/i;
+const DELIVERED_RE = /delivered/i;
+
+export async function lineType(peer) {
+  const r = await aone('SELECT line_type, detail FROM sms_numbers WHERE peer = ?', [normalize(peer)]);
+  return r ? r.line_type : 'unknown';
+}
+
+async function learnLine(peer, carrierStatus) {
+  const st = String(carrierStatus || '');
+  const type = LANDLINE_RE.test(st) ? 'landline' : DELIVERED_RE.test(st) ? 'mobile' : null;
+  if (!type) return;
+  await arun(
+    `INSERT INTO sms_numbers (peer, line_type, detail) VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE line_type = VALUES(line_type), detail = VALUES(detail)`,
+    [normalize(peer), type, st.slice(0, 80)]
+  );
+}
+
+/** Lee de VoIP.ms el estado de entrega de lo enviado en los últimos días y aprende el tipo de cada número. */
+export async function syncDelivery(days = 3) {
+  const cfg = await getConfig({ withSecrets: true });
+  if (!cfg.available || !cfg.enabled) return 0;
+  const fmt = (d) => d.toISOString().slice(0, 10);
+  const from = fmt(new Date(Date.now() - days * 86400000));
+  const to = fmt(new Date(Date.now() + 86400000));
+  let n = 0;
+  for (const did of cfg.dids) {
+    let list = [];
+    try {
+      list = (await voipms(cfg, 'getSMS', { did, from, to, type: '0', limit: '1000' })).sms || [];
+    } catch (e) {
+      if (e.code !== 'no_sms') console.error(`VoIP.ms entregas ${did}:`, e.code || errText(e));
+      continue;
+    }
+    // De más antiguo a más reciente: manda el último estado de cada número
+    for (const m of list.slice().reverse()) {
+      if (!m.carrier_status) continue;
+      await learnLine(m.contact, m.carrier_status);
+      await arun("UPDATE sms_messages SET delivery = ? WHERE provider_id = ? AND direction = 'out'", [String(m.carrier_status).slice(0, 80), `out-${m.id}`]);
+      n++;
+    }
+  }
+  return n;
+}
+
 export async function findLead(peer) {
   if (normalize(peer).length < 7) return null;
   const r = await one(
@@ -300,6 +349,7 @@ export async function send({ peer, body, media = [], user, leadId, did, allowed,
   if (text.length > 1000) throw new HttpError(400, 'Mensaje demasiado largo (máx. 1000 caracteres)');
   if (media.length > 3) throw new HttpError(400, 'Máximo 3 imágenes por mensaje');
   if (await isDnc(to)) throw new HttpError(409, 'Este número está en la lista negra (DNC): no se le pueden enviar mensajes');
+  if ((await lineType(to)) === 'landline') throw new HttpError(409, 'Este número es un teléfono fijo: no puede recibir SMS');
   // Número de envío: el elegido, el de la campaña del agente o el primero de su empresa
   const mine = allowed ?? cfg.dids;
   if (!mine.length) throw new HttpError(400, 'Tu empresa no tiene ningún número con SMS configurado');
@@ -464,7 +514,11 @@ export async function poll() {
 
 export function startPolling() {
   if (!appEnabled) return;
-  const run = () => poll().catch((e) => console.error('Consulta SMS:', e.message));
+  const run = () =>
+    poll()
+      .catch((e) => console.error('Consulta SMS:', e.message))
+      .then(() => syncDelivery())
+      .catch((e) => console.error('Entregas SMS:', e.message));
   setTimeout(run, 10_000);
   // Los mensajes llegan al momento por el webhook; la consulta solo recoge los que se hubieran perdido
   setInterval(run, 5 * 60_000);

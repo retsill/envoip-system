@@ -699,5 +699,12 @@
   "Nombre (ej.: Saludo de la mañana)": "Name (e.g.: Morning greeting)",
   "Hola {nombre}, soy {agente} de…": "Hi {nombre}, this is {agente} from…",
   "Añadir plantilla": "Add template",
-  "hoy {used} de {limit} SMS": "today {used} of {limit} SMS"
+  "hoy {used} de {limit} SMS": "today {used} of {limit} SMS",
+  "entregado": "delivered",
+  "no entregado: es un teléfono fijo": "not delivered: landline",
+  "no entregado ({reason})": "not delivered ({reason})",
+  "Este número es un teléfono fijo: no recibe SMS. Llama al cliente o pídele un número de móvil.": "This number is a landline: it cannot receive SMS. Call the customer or ask for a mobile number.",
+  "No recibe SMS": "Cannot receive SMS",
+  "Teléfono fijo · no recibe SMS": "Landline · no SMS",
+  "Móvil": "Mobile"
 }

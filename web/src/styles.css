@@ -634,3 +634,5 @@ td.row-actions { white-space: nowrap; }
 .inbox { align-items: start; }
 .inbox-thread { height: calc(var(--conv-row, 58px) * 10 + 120px); min-height: 560px; }
 @media (max-width: 860px) { .inbox-thread { height: 72dvh; min-height: 0; } .conv-list { max-height: 38dvh; } }
+
+.ok { color: var(--green-text); }

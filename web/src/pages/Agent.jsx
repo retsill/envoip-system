@@ -570,9 +570,7 @@ function LeadCard({ lead, run, busy }) {
           <span>
             <span className="lead-name">{name}</span>
             <span className="sub mono">+{lead.phone_code} {fmtPhone(lead.phone_number)} · {t('lead #{id} · lista {list} · {n} llamadas', { id: lead.lead_id, list: lead.list_id, n: lead.called_count })}</span>
-            {sms?.enabled && tab !== 'sms' && (
-              <button className="btn btn-primary btn-sm lead-sms" onClick={() => setTab('sms')}>💬 {t('Enviar SMS')}</button>
-            )}
+            {sms?.enabled && <LineBadge phone={lead.phone_number} showSend={tab !== 'sms'} onSend={() => setTab('sms')} />}
           </span>
         </span>
       }
@@ -613,6 +611,27 @@ function LeadCard({ lead, run, busy }) {
       </label>
       </>}
     </Card>
+  );
+}
+
+// Tipo de línea del cliente: fijo (no recibe SMS) o móvil, aprendido de las entregas de VoIP.ms
+function LineBadge({ phone, showSend, onSend }) {
+  const t = useT();
+  const [type, setType] = useState('unknown');
+  useEffect(() => {
+    let alive = true;
+    setType('unknown');
+    if (phone) api(`/sms/line?peer=${encodeURIComponent(phone)}`).then((r) => alive && setType(r.lineType), () => {});
+    return () => {
+      alive = false;
+    };
+  }, [phone]);
+  if (type === 'landline') return <span className="chip chip-red lead-sms" title={t('No recibe SMS')}>📵 {t('Teléfono fijo · no recibe SMS')}</span>;
+  return (
+    <>
+      {type === 'mobile' && <span className="chip chip-green lead-sms">📱 {t('Móvil')}</span>}
+      {showSend && <button className="btn btn-primary btn-sm lead-sms" onClick={onSend}>💬 {t('Enviar SMS')}</button>}
+    </>
   );
 }
 
