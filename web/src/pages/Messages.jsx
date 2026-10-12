@@ -71,7 +71,10 @@ export default function Messages() {
   return (
     <div className="page page-fill">
       <div className="page-head">
-        <div><h1>{t('Mensajes')}</h1><p className="muted">{t('SMS y MMS con tus clientes · desde {did}', { did: status?.defaultDid ? fmtPhone(status.defaultDid) : '…' })}</p></div>
+        <div><h1>{t('Mensajes')}</h1><p className="muted">{t('SMS y MMS con tus clientes · desde {did}', { did: status?.defaultDid ? fmtPhone(status.defaultDid) : '…' })}
+          {status?.usedToday?.[status.defaultDid] !== undefined && (
+            <> · <span className={status.usedToday[status.defaultDid] >= status.dailyLimit ? 'warn' : ''}>{t('hoy {used} de {limit} SMS', { used: status.usedToday[status.defaultDid], limit: status.dailyLimit })}</span></>
+          )}</p></div>
         <form className="page-actions" onSubmit={startNew}>
           <input placeholder={t('Nuevo: número de 10 dígitos')} value={newNumber} onChange={(e) => setNewNumber(e.target.value)} inputMode="tel" />
           <button className="btn btn-primary" disabled={newNumber.replace(/\D/g, '').length < 10}>{t('Escribir')}</button>

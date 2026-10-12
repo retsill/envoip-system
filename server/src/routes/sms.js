@@ -45,6 +45,8 @@ router.get(
       enabled: cfg.enabled && dids.length > 0,
       dids,
       defaultDid: dids.includes(mine) ? mine : dids.includes(cfg.defaultDid) ? cfg.defaultDid : dids[0] || '',
+      dailyLimit: cfg.dailyLimit,
+      usedToday: Object.fromEntries(await Promise.all(dids.map(async (d) => [d, await sms.usedToday(d)]))),
     });
   })
 );

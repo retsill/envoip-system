@@ -10,7 +10,7 @@ import { HttpError } from './util.js';
 // Envío y recepción con la API de VoIP.ms; cada mensaje se une al lead de Vicidial por su teléfono.
 
 export const MEDIA_DIR = process.env.SMS_MEDIA_DIR || path.resolve('/opt/vicimodern/data/sms-media');
-const SETTING_KEYS = ['voipms_user', 'voipms_pass', 'dids', 'default_did', 'webhook_token', 'stop_reply', 'enabled'];
+const SETTING_KEYS = ['voipms_user', 'voipms_pass', 'dids', 'default_did', 'webhook_token', 'stop_reply', 'enabled', 'daily_limit'];
 const STOP_WORDS = /^\s*(stop|stopall|unsubscribe|cancel|end|quit|baja|alto|cancelar|parar)\s*[.!]*\s*$/i;
 
 /** Números norteamericanos a 10 dígitos; extensiones y otros se dejan en dígitos. */
@@ -37,6 +37,8 @@ export async function getConfig({ withSecrets = false } = {}) {
     dids,
     defaultDid: normalize(s.default_did) || dids[0] || '',
     webhookToken: s.webhook_token,
+    // VoIP.ms permite 100 SMS al día por número (más si se registra el número para mensajes comerciales, 10DLC)
+    dailyLimit: Number(s.daily_limit) > 0 ? Number(s.daily_limit) : 100,
     stopReply: s.stop_reply || 'Te has dado de baja. No recibirás más mensajes. / You have been unsubscribed.',
   };
 }
@@ -49,6 +51,7 @@ export async function saveConfig(b) {
   if (b.defaultDid !== undefined) upd.default_did = normalize(b.defaultDid);
   if (b.stopReply !== undefined) upd.stop_reply = String(b.stopReply).slice(0, 300);
   if (b.enabled !== undefined) upd.enabled = b.enabled ? '1' : '0';
+  if (b.dailyLimit !== undefined) upd.daily_limit = String(Math.max(1, Math.min(100000, Number(b.dailyLimit) || 100)));
   if (b.regenerateToken) upd.webhook_token = crypto.randomBytes(18).toString('hex');
   await setSettings(upd);
 }
@@ -81,7 +84,7 @@ function voipmsError(code) {
       sms_not_enabled: 'VoIP.ms: el DID no tiene SMS activado',
       mms_not_enabled: 'VoIP.ms: el DID no tiene MMS activado',
       invalid_dst: 'VoIP.ms: número de destino no válido',
-      limit_reached: 'VoIP.ms: límite de mensajes alcanzado',
+      limit_reached: 'VoIP.ms: límite diario de SMS alcanzado (se reinicia mañana)',
     }[code] || 'VoIP.ms: {code}'
   );
 }
@@ -253,12 +256,29 @@ export function splitSms(text) {
   return parts;
 }
 
+/** SMS gastados hoy por un número (cada mensaje cuenta sus partes; los MMS, uno). */
+export async function usedToday(did) {
+  const rows = await aall(
+    `SELECT body, media, status, error FROM sms_messages
+     WHERE direction = 'out' AND did = ? AND created_at >= CURDATE() AND (status = 'sent' OR error LIKE '%enviadas % de %')`,
+    [normalize(did)]
+  );
+  let n = 0;
+  for (const r of rows) {
+    if (r.status === 'sent') n += r.media ? 1 : splitSms(smsText(r.body || '')).length;
+    else n += Number(String(r.error).match(/enviadas (\d+) de/)?.[1] || 0);
+  }
+  return n;
+}
+
 /** sendSMS con un reintento si VoIP.ms tarda o falla en su lado (timeout, 5xx de Cloudflare/servidor). */
 async function sendWithRetry(cfg, params) {
   try {
     return await voipms(cfg, 'sendSMS', params);
   } catch (e) {
-    const transient = e.name === 'TimeoutError' || /timeout|aborted/i.test(String(e.message)) || /^http_5/.test(e.code || '');
+    // Solo si VoIP.ms ni siquiera recibió la petición (Cloudflare no pudo conectar). Si tardó en responder, el SMS
+    // puede haber salido: reintentar lo duplicaría.
+    const transient = ['http_521', 'http_522', 'http_523'].includes(e.code);
     if (!transient) throw e;
     await sleep(3000);
     return voipms(cfg, 'sendSMS', params);
@@ -286,6 +306,18 @@ export async function send({ peer, body, media = [], user, leadId, did, allowed,
   const wanted = normalize(did) || (mine.includes(normalize(preferred)) ? normalize(preferred) : '');
   const from = wanted || (mine.includes(cfg.defaultDid) ? cfg.defaultDid : mine[0]);
   if (!mine.includes(from)) throw new HttpError(400, 'El DID de envío no está configurado');
+
+  // Límite diario de VoIP.ms: si no caben todas las partes, no se envía nada (evita mensajes a medias)
+  const parts = media.length ? 1 : splitSms(smsText(text)).length;
+  const used = await usedToday(from);
+  if (used + parts > cfg.dailyLimit) {
+    throw new HttpError(429, 'Límite diario de SMS alcanzado en el {did}: {used} de {limit} (este mensaje necesita {parts}). Se reinicia mañana.', {
+      did: from,
+      used,
+      limit: cfg.dailyLimit,
+      parts,
+    });
+  }
 
   // Guardar adjuntos para poder mostrarlos después
   const saved = [];

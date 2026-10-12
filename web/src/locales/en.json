@@ -698,5 +698,6 @@
   "Las usan todos los agentes de tu empresa. {nombre} se cambia por el nombre del cliente y {agente} por el del agente.": "All agents in your company use them. {nombre} becomes the customer name and {agente} the agent name.",
   "Nombre (ej.: Saludo de la mañana)": "Name (e.g.: Morning greeting)",
   "Hola {nombre}, soy {agente} de…": "Hi {nombre}, this is {agente} from…",
-  "Añadir plantilla": "Add template"
+  "Añadir plantilla": "Add template",
+  "hoy {used} de {limit} SMS": "today {used} of {limit} SMS"
 }

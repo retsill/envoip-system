@@ -133,5 +133,7 @@
   "Esta opción es común a todas las empresas: solo la puede cambiar un administrador general": "This setting is shared by all companies: only a general administrator can change it",
   "No hay nada que borrar": "Nothing to delete",
   "Rellamada no encontrada": "Callback not found",
-  "Mensaje demasiado largo (máx. 1000 caracteres)": "Message too long (max. 1000 characters)"
+  "Mensaje demasiado largo (máx. 1000 caracteres)": "Message too long (max. 1000 characters)",
+  "Límite diario de SMS alcanzado en el {did}: {used} de {limit} (este mensaje necesita {parts}). Se reinicia mañana.": "Daily SMS limit reached on {did}: {used} of {limit} (this message needs {parts}). It resets tomorrow.",
+  "VoIP.ms: límite diario de SMS alcanzado (se reinicia mañana)": "VoIP.ms: daily SMS limit reached (resets tomorrow)"
 }
