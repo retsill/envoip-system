@@ -30,10 +30,18 @@ async function build(user) {
   const campaigns = allCampaigns
     ? (await all('SELECT campaign_id FROM vicidial_campaigns')).map((r) => r.campaign_id)
     : camps.trim().split(/\s+/).filter((c) => c && c !== '-');
-  const [lists, users, ingroups] = await Promise.all([
+  // Empresa: el propio grupo más los que ven los mismos gerentes (p. ej. WHITESTONE, WSELIAS y WSGERENCIA).
+  // Solo lo usa el chat interno: los agentes de una empresa se ven conectados aunque sus datos estén separados.
+  const managers = await all(
+    "SELECT admin_viewable_groups v FROM vicidial_user_groups WHERE CONCAT(' ', admin_viewable_groups, ' ') LIKE ? AND admin_viewable_groups NOT LIKE '%---ALL---%'",
+    [`% ${u.user_group} %`]
+  );
+  const company = [...new Set([...groups, ...managers.flatMap((m) => m.v.trim().split(/\s+/).filter((g) => g && g !== '-'))])];
+  const [lists, users, ingroups, companyUsers] = await Promise.all([
     campaigns.length ? all('SELECT list_id FROM vicidial_lists WHERE campaign_id IN (?)', [campaigns]) : [],
     all('SELECT user FROM vicidial_users WHERE user_group IN (?)', [groups]),
     all('SELECT group_id FROM vicidial_inbound_groups WHERE user_group IN (?)', [groups]),
+    all('SELECT user FROM vicidial_users WHERE user_group IN (?)', [company]),
   ]);
   return {
     all: false,
@@ -43,6 +51,8 @@ async function build(user) {
     lists: lists.map((r) => String(r.list_id)),
     users: users.map((r) => r.user),
     ingroups: ingroups.map((r) => r.group_id),
+    company,
+    companyUsers: companyUsers.map((r) => r.user),
   };
 }
 
@@ -65,7 +75,7 @@ export const withScope = ah(async (req, res, next) => {
 const vals = (arr) => (arr.length ? arr : [NONE]);
 
 /**
- * Condición SQL «col IN (…)» para el tipo indicado (campaigns, lists, users, groups, ingroups), o «1=1» si el
+ * Condición SQL «col IN (…)» para el tipo indicado (campaigns, lists, users, groups, ingroups, company), o «1=1» si el
  * usuario lo ve todo. Uso: const f = inScope(req.scope, 'campaigns', 'c.campaign_id'); `WHERE ${f.sql}`, [...f.args]
  */
 export function inScope(scope, kind, col) {
@@ -90,6 +100,8 @@ const NOT_FOUND = {
   users: 'Usuario no encontrado',
   groups: 'Grupo no válido',
   ingroups: 'Cola no encontrada',
+  company: 'Grupo no válido',
+  companyUsers: 'Usuario no encontrado',
 };
 
 /** Error 404 (no se revela que existe en otra empresa) si el valor no es de la empresa del usuario. */

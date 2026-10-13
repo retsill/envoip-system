@@ -136,15 +136,16 @@ router.get(
   })
 );
 
-// Agentes conectados con los que se puede abrir un chat
+// Agentes conectados con los que se puede abrir un chat: toda la empresa, aunque sus datos estén separados
 router.get(
   '/agents',
   ah(async (req, res) => {
+    const f = inScope(req.scope, 'company', 'u.user_group');
     res.json(
       await all(
         `SELECT la.user, u.full_name, la.status, la.campaign_id FROM vicidial_live_agents la
-         JOIN vicidial_users u ON u.user = la.user WHERE la.user <> ? AND ${inScope(req.scope, 'groups', 'u.user_group').sql} ORDER BY u.full_name`,
-        [req.user.user, ...inScope(req.scope, 'groups', 'u.user_group').args]
+         JOIN vicidial_users u ON u.user = la.user WHERE la.user <> ? AND ${f.sql} ORDER BY u.full_name`,
+        [req.user.user, ...f.args]
       )
     );
   })
@@ -173,7 +174,7 @@ router.post(
   ah(async (req, res) => {
     const me = await credentials(req.user.user);
     const agent = str(req.body?.agent, { max: 20, re: /^[A-Za-z0-9]+$/, name: 'agente' });
-    assertScope(req.scope, 'users', agent);
+    assertScope(req.scope, 'companyUsers', agent);
     const text = str(req.body?.text, { max: 1000, name: 'mensaje' }).replace(/[\r\n]+/g, ' ');
     const existing = await one(
       `SELECT manager_chat_id id FROM vicidial_manager_chats
