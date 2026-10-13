@@ -1,5 +1,12 @@
 # Novedades
 
+## 1.0.3 — 2026-10-13
+
+- **Entrantes también en pausa:** si un agente está en pausa (sin cliente en pantalla) y entra una llamada a una de
+  sus colas, EnVoip System le quita la pausa para que Vicidial se la pase y, al terminar, lo deja otra vez en pausa.
+  Solo salta al buzón u otro agente si está realmente ocupado en otra llamada.
+- **Aprovisionamiento:** la instalación de `codec_opus` ya no deja a medias el resto del script.
+
 ## 1.0.2 — 2026-10-02
 
 - **Rellamadas:** panel «Mis rellamadas» y aviso con cuenta atrás que marca solo cuando llega la hora (Vicidial no

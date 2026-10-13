@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BASE_PATH, requireAuth, requireLevel, TTL_MS } from './auth.js';
 import { startGateCleanup } from './gate.js';
+import { startInboundPause } from './inboundPause.js';
 import { withScope } from './scope.js';
 import authRoutes from './routes/auth.js';
 import supervisorRoutes from './routes/supervisor.js';
@@ -56,6 +57,7 @@ app.get([BASE_PATH, `${BASE_PATH}/*`], (req, res) => {
 });
 
 startGateCleanup(TTL_MS);
+startInboundPause();
 
 migrate()
   .then(startPolling)
