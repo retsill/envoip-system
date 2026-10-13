@@ -368,12 +368,12 @@ fi
 echo "prefijos con zona horaria: $(q "SELECT COUNT(*) FROM vicidial_phone_codes")"
 # Opus: códec de los navegadores y la app que tolera la pérdida de paquetes (G.711 se oye cortado en redes malas).
 # Asterisk 18 de ViciBox no trae el traductor: se instala el oficial de Sangoma/Digium (gratuito).
-M=/usr/lib64/asterisk/modules
-if [ ! -f $M/codec_opus.so ]; then
+MODS=/usr/lib64/asterisk/modules
+if [ ! -f $MODS/codec_opus.so ]; then
   tmp=$(mktemp -d)
   if curl -fsS -m 120 -o $tmp/opus.tgz https://downloads.digium.com/pub/telephony/codec_opus/asterisk-18.0/x86-64/codec_opus-18.0_current-x86_64.tar.gz; then
     tar xzf $tmp/opus.tgz -C $tmp && d=$(find $tmp -maxdepth 1 -type d -name 'codec_opus-*')
-    install -m 755 $d/codec_opus.so $M/
+    install -m 755 $d/codec_opus.so $MODS/
     # Sin su documentación XML el módulo no carga («failed to register sorcery object type 'opus'»)
     DOC=$(asterisk -rx "core show settings" 2>/dev/null | awk -F': *' '/Data directory/{print $2}')
     mkdir -p "${DOC:-/usr/share/asterisk}/documentation/thirdparty"
