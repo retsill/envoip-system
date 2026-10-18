@@ -430,7 +430,77 @@ export async function storeInbound({ from, to, body, media = [], providerId, dat
   );
   if (!res.affectedRows) return null; // ya estaba
   if (STOP_WORDS.test(String(body ?? ''))) await handleStop(peer, normalize(to));
+  else await autoReply(res.insertId, source).catch((e) => console.error(`respuesta automática ${peer}:`, errText(e)));
   return res.insertId;
+}
+
+// ---------------------------------------------------------------- Respuesta automática (por número)
+// Cada DID puede tener su texto de bienvenida (primer mensaje de un cliente, o si no escribía desde hace
+// «resendDays» días) y su texto fuera de horario (como mucho uno cada 12 h por cliente). Se guarda en
+// settings como «autoreply:<did>». El horario es la hora del servidor (America/New_York).
+const AR_KEY = (did) => `autoreply:${did}`;
+const AR_DEFAULT = { welcome: '', afterHours: '', days: [1, 2, 3, 4, 5], start: '09:00', end: '18:00', resendDays: 30 };
+
+export async function getAutoReplies(dids) {
+  const s = await getSettings(dids.map(AR_KEY));
+  return dids.map((did) => {
+    let v = {};
+    try {
+      v = JSON.parse(s[AR_KEY(did)] || '{}');
+    } catch {
+      /* valor dañado: se usan los valores por defecto */
+    }
+    return { did, ...AR_DEFAULT, ...v };
+  });
+}
+
+export async function saveAutoReply(did, b) {
+  const hhmm = (v, def) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(v)) ? String(v) : def);
+  const v = {
+    welcome: String(b.welcome ?? '').trim().slice(0, 480),
+    afterHours: String(b.afterHours ?? '').trim().slice(0, 480),
+    days: [...new Set((Array.isArray(b.days) ? b.days : AR_DEFAULT.days).map(Number).filter((d) => d >= 0 && d <= 6))].sort(),
+    start: hhmm(b.start, AR_DEFAULT.start),
+    end: hhmm(b.end, AR_DEFAULT.end),
+    resendDays: Math.min(365, Math.max(1, Number(b.resendDays) || AR_DEFAULT.resendDays)),
+  };
+  await setSettings({ [AR_KEY(did)]: JSON.stringify(v) });
+  return { did, ...v };
+}
+
+function inHours(c, now = new Date()) {
+  const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  return c.days.includes(now.getDay()) && hm >= c.start && hm < c.end;
+}
+
+async function autoReply(id, source) {
+  const m = await aone('SELECT did, peer, TIMESTAMPDIFF(MINUTE, created_at, NOW()) age FROM sms_messages WHERE id = ?', [id]);
+  if (!m?.did) return;
+  // El aviso de VoIP.ms (webhook) es siempre al momento; lo recogido consultando puede ser antiguo y no se contesta
+  if (source !== 'webhook' && !(Math.abs(m.age) <= 15)) return;
+  const [c] = await getAutoReplies([m.did]);
+  if (!c.welcome && !c.afterHours) return;
+  const prev = await aone(
+    'SELECT TIMESTAMPDIFF(DAY, MAX(created_at), NOW()) days FROM sms_messages WHERE did = ? AND peer = ? AND id <> ?',
+    [m.did, m.peer, id]
+  );
+  const first = prev?.days === null || prev?.days === undefined || prev.days >= c.resendDays;
+  let text = '';
+  if (first && c.welcome) text = c.welcome;
+  else if (c.afterHours && !inHours(c)) {
+    const recent = await aone(
+      "SELECT COUNT(*) n FROM sms_messages WHERE did = ? AND peer = ? AND source = 'auto' AND body = ? AND created_at > NOW() - INTERVAL 12 HOUR",
+      [m.did, m.peer, c.afterHours]
+    );
+    if (!Number(recent?.n)) text = c.afterHours;
+  }
+  if (!text) return;
+  try {
+    await send({ peer: m.peer, body: text, did: m.did, allowed: [m.did], source: 'auto' });
+  } catch (e) {
+    // Lista negra, teléfono fijo o límite diario: no se contesta
+    if (!(e instanceof HttpError)) throw e;
+  }
 }
 
 // Baja: el número entra en la lista negra del sistema y se confirma una vez

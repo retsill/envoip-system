@@ -230,6 +230,19 @@ router.put(
   })
 );
 
+// Respuesta automática por número: los gerentes de cada empresa la configuran para sus propios números
+router.get('/autoreply', requireLevel(8), ah(async (req, res) => res.json({ numbers: await sms.getAutoReplies(req.smsDids) })));
+
+router.put(
+  '/autoreply',
+  requireLevel(8),
+  ah(async (req, res) => {
+    const did = String(req.body?.did ?? '').replace(/\D/g, '').slice(-10);
+    if (!req.smsDids.includes(did)) throw new HttpError(404, 'Número no encontrado');
+    res.json(await sms.saveAutoReply(did, req.body || {}));
+  })
+);
+
 // ---------------------------------------------------------------- Administración
 router.get(
   '/settings',

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fmtPhone, post, usePoll } from '../api.js';
 import SmsThread from '../components/SmsThread.jsx';
+import AutoReply from '../components/AutoReply.jsx';
 import { Empty, useToast } from '../components/ui.jsx';
 import { useConfirm } from '../components/Modal.jsx';
 import { useLongPress } from '../components/useLongPress.js';
@@ -28,6 +29,7 @@ export default function Messages() {
   const { data: convs, refresh } = usePoll(`/sms/conversations?q=${encodeURIComponent(q)}${onlyUnread ? '&unread=1' : ''}`, 4000);
   const [peer, setPeer] = useState(null);
   const [newNumber, setNewNumber] = useState('');
+  const [autoOpen, setAutoOpen] = useState(false);
   const confirm = useConfirm();
   const toast = useToast();
   // Selección para borrar varias conversaciones: se entra manteniendo pulsado o con la casilla
@@ -78,8 +80,10 @@ export default function Messages() {
         <form className="page-actions" onSubmit={startNew}>
           <input placeholder={t('Nuevo: número de 10 dígitos')} value={newNumber} onChange={(e) => setNewNumber(e.target.value)} inputMode="tel" />
           <button className="btn btn-primary" disabled={newNumber.replace(/\D/g, '').length < 10}>{t('Escribir')}</button>
+          {isAdmin && <button type="button" className="btn btn-ghost" onClick={() => setAutoOpen(true)}>{t('Respuesta automática')}</button>}
         </form>
       </div>
+      <AutoReply open={autoOpen} onClose={() => setAutoOpen(false)} />
       {status && !status.enabled && (
         <div className="alert alert-warn">
           {t('La mensajería SMS aún no está configurada: puedes ver los mensajes, pero no enviar.')}{' '}

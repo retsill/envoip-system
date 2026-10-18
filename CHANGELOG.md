@@ -2,6 +2,9 @@
 
 ## 1.0.3 — 2026-10-13
 
+- **Respuesta automática por número (SMS):** bienvenida al primer mensaje de un cliente (se repite si no escribía
+  desde hace N días) y aviso fuera de horario, cada número con sus textos y su horario. La configuran los gerentes de
+  cada empresa en Mensajes → Respuesta automática.
 - **Entrantes también en pausa:** si un agente está en pausa (sin cliente en pantalla) y entra una llamada a una de
   sus colas, EnVoip System le quita la pausa para que Vicidial se la pase y, al terminar, lo deja otra vez en pausa.
   Solo salta al buzón u otro agente si está realmente ocupado en otra llamada.
