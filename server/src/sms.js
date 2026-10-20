@@ -109,6 +109,12 @@ export async function didsFor(scope, cfg) {
   const mine = new Set(rows.map((r) => normalize(r.did_pattern)));
   return cfg.dids.filter((d) => mine.has(d));
 }
+/** Números del propio grupo del usuario (no los de los grupos que administra). Vacío si su grupo no tiene ninguno. */
+export async function ownDids(group, cfg) {
+  const rows = await all('SELECT did_pattern FROM vicidial_inbound_dids WHERE user_group = ?', [group || '-']);
+  const mine = new Set(rows.map((r) => normalize(r.did_pattern)));
+  return cfg.dids.filter((d) => mine.has(d));
+}
 const didList = (dids) => (dids && dids.length ? dids : NO_DID);
 
 // ---------------------------------------------------------------- Consultas

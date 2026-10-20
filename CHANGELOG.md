@@ -2,6 +2,8 @@
 
 ## 1.0.3 — 2026-10-13
 
+- **SMS en la app EnVoIP Phone:** cada usuario ve solo los mensajes de los números de su propio grupo (un
+  administrador ya no recibe en el teléfono los de todos los agentes). En la web no cambia nada.
 - **Respuesta automática por número (SMS):** bienvenida al primer mensaje de un cliente (se repite si no escribía
   desde hace N días) y aviso fuera de horario, cada número con sus textos y su horario. La configuran los gerentes de
   cada empresa en Mensajes → Respuesta automática.

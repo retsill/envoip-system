@@ -25,7 +25,8 @@ export function requireAuth(req, res, next) {
     // Web: cookie de sesión. App EnVoIP Phone: cabecera «Authorization: Bearer <token>».
     const bearer = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '')?.[1];
     const { user, name, level, group } = jwt.verify(bearer || req.cookies[COOKIE] || '', SECRET);
-    req.user = { user, name, level, group };
+    // app = acceso desde EnVoIP Phone (con token): ahí cada usuario ve solo los números de su propio grupo
+    req.user = { user, name, level, group, app: Boolean(bearer) };
     // Sesión web: mantener abierta la llave del Vicidial clásico mientras se use la app
     if (!bearer) openGate(req, res, req.cookies[COOKIE], level, { secure: cookieOptions.secure, maxAge: TTL_MS });
     next();

@@ -29,6 +29,12 @@ router.use(
     req.scope = await loadScope(req.user.user);
     const cfg = await sms.getConfig();
     req.smsDids = cfg.available ? await sms.didsFor(req.scope, cfg) : [];
+    // En la app EnVoIP Phone cada uno ve solo los mensajes de los números de su propio grupo (un administrador
+    // no recibe en el teléfono los de todos los agentes); si su grupo no tiene números, los de su empresa
+    if (cfg.available && req.user.app) {
+      const own = await sms.ownDids(req.scope.group, cfg);
+      if (own.length) req.smsDids = own;
+    }
     next();
   })
 );
