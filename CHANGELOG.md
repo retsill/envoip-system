@@ -2,6 +2,9 @@
 
 ## 1.0.3 — 2026-10-13
 
+- **Puerta de acceso:** la API clásica de Vicidial (`/vicidial/non_agent_api.php` y `/agc/api.php`) queda accesible para
+  integraciones externas (piden su propio usuario y contraseña), y las redirecciones al panel ya no arrastran los
+  parámetros de la dirección a los registros.
 - **SMS en la app EnVoIP Phone:** cada usuario ve solo los mensajes de los números de su propio grupo (un
   administrador ya no recibe en el teléfono los de todos los agentes). En la web no cambia nada.
 - **Respuesta automática por número (SMS):** bienvenida al primer mensaje de un cliente (se repite si no escribía
