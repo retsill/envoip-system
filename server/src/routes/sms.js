@@ -19,6 +19,53 @@ smsWebhook.all(
   })
 );
 
+// Puerta SMS por HTTP para integraciones (Fundix…): envía un mensaje por uno de nuestros números.
+// POST con to, text, from (opcional) y media (enlaces separados por comas, opcional);
+// la llave va en «Authorization: Bearer …» (o ?token=). Respuesta: {"ok":true,…} si salió.
+smsWebhook.post(
+  '/send',
+  ah(async (req, res) => {
+    const got = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '')?.[1] || req.query.token || req.body?.token;
+    if (!got || got !== (await sms.gatewayToken())) throw new HttpError(403, 'token no válido');
+    const p = { ...req.query, ...(req.body || {}) };
+    const to = String(p.to || '').trim();
+    const text = String(p.text ?? p.message ?? '').trim();
+    // Imágenes: se descargan (máx. 3, 8 s cada una); las que no se puedan traer se avisan y el texto sale igual
+    const media = [];
+    const skipped = [];
+    for (const u of String(p.media || '').split(/[,\s]+/).filter((x) => /^https?:\/\//i.test(x)).slice(0, 3)) {
+      try {
+        const r = await fetch(u, { signal: AbortSignal.timeout(8000) });
+        if (!r.ok) throw new Error(`respondió ${r.status}`);
+        const buf = Buffer.from(await r.arrayBuffer());
+        media.push({ name: u.split('/').pop().split('?')[0] || 'imagen.jpg', data: buf.toString('base64') });
+      } catch {
+        skipped.push(u);
+      }
+    }
+    if (!to || (!text && !media.length)) throw new HttpError(400, 'Faltan el destino (to) o el texto (text)');
+    const row = await sms.send({ peer: to, body: text, media, did: p.from || (await sms.gatewayDefaultDid()), source: 'gateway' });
+    res.status(row.status === 'sent' ? 200 : 502).json({
+      ok: row.status === 'sent',
+      id: row.id,
+      status: row.status,
+      error: row.error || undefined,
+      mediaOmitida: skipped.length ? skipped : undefined,
+    });
+  })
+);
+
+// Imágenes de los mensajes para quien recibe el reenvío de entrantes (con la misma llave)
+smsWebhook.get(
+  '/media/:file',
+  ah(async (req, res) => {
+    if (!req.query.token || req.query.token !== (await sms.gatewayToken())) throw new HttpError(403, 'token no válido');
+    const file = String(req.params.file);
+    if (!/^[\w.-]+$/.test(file) || file.includes('..')) throw new HttpError(400, 'nombre no válido');
+    res.sendFile(path.join(sms.MEDIA_DIR, file), { maxAge: '7d' });
+  })
+);
+
 // ---------------------------------------------------------------- Usuarios conectados
 const router = Router();
 router.use(requireAuth);

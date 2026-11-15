@@ -109,6 +109,46 @@ export async function didsFor(scope, cfg) {
   const mine = new Set(rows.map((r) => normalize(r.did_pattern)));
   return cfg.dids.filter((d) => mine.has(d));
 }
+// ---------------------------------------------------------------- Puerta SMS por HTTP (Fundix y similares)
+/** Llave de la puerta de envío por HTTP (cabecera «Authorization: Bearer …»). Se crea la primera vez. */
+export async function gatewayToken() {
+  const s = await getSettings(['gateway_token']);
+  if (s.gateway_token) return s.gateway_token;
+  const t = crypto.randomBytes(18).toString('hex');
+  await setSettings({ gateway_token: t });
+  return t;
+}
+
+/** Número de envío por defecto de la puerta HTTP (si quien llama no indica «from»). */
+export async function gatewayDefaultDid() {
+  const s = await getSettings(['gateway_default_did']);
+  return normalize(s.gateway_default_did);
+}
+
+/**
+ * Reenvío de entrantes: si el número tiene configurada una dirección (ajuste «smsfwd:<did>»), se la llama
+ * sustituyendo {from}, {to}, {text} y {media} (enlaces a las imágenes, separados por comas). Un fallo solo
+ * se apunta en el registro: el mensaje ya quedó guardado en EnVoip System.
+ */
+async function forwardInbound(id) {
+  const m = await aone('SELECT did, peer, body, media FROM sms_messages WHERE id = ?', [id]);
+  if (!m?.did) return;
+  const s = await getSettings([`smsfwd:${m.did}`]);
+  const tpl = s[`smsfwd:${m.did}`];
+  if (!tpl) return;
+  const token = await gatewayToken();
+  const base = process.env.PUBLIC_HOST ? `https://${process.env.PUBLIC_HOST}${process.env.BASE_PATH || '/modern'}` : '';
+  const links = (m.media ? JSON.parse(m.media) : [])
+    .map((x) => (String(x).startsWith('media:') ? `${base}/api/sms-hook/media/${String(x).slice(6)}?token=${token}` : String(x)));
+  const url = tpl
+    .replaceAll('{from}', encodeURIComponent(m.peer))
+    .replaceAll('{to}', encodeURIComponent(m.did))
+    .replaceAll('{text}', encodeURIComponent(m.body || ''))
+    .replaceAll('{media}', encodeURIComponent(links.join(',')));
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000), redirect: 'manual' });
+  if (!res.ok) throw new HttpError(502, `respondió ${res.status}`);
+}
+
 /** Números del propio grupo del usuario (no los de los grupos que administra). Vacío si su grupo no tiene ninguno. */
 export async function ownDids(group, cfg) {
   const rows = await all('SELECT did_pattern FROM vicidial_inbound_dids WHERE user_group = ?', [group || '-']);
@@ -435,6 +475,7 @@ export async function storeInbound({ from, to, body, media = [], providerId, dat
     [normalize(to), peer, String(body ?? ''), media.length ? JSON.stringify(media) : null, providerId || null, lead, source, date || null]
   );
   if (!res.affectedRows) return null; // ya estaba
+  forwardInbound(res.insertId).catch((e) => console.error(`reenvío SMS ${peer}:`, errText(e)));
   if (STOP_WORDS.test(String(body ?? ''))) await handleStop(peer, normalize(to));
   else await autoReply(res.insertId, source).catch((e) => console.error(`respuesta automática ${peer}:`, errText(e)));
   return res.insertId;

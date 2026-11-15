@@ -2,6 +2,9 @@
 
 ## 1.0.3 — 2026-10-13
 
+- **Puerta SMS por HTTP:** integraciones externas (Fundix…) pueden enviar SMS/MMS por nuestros números
+  (`/api/sms-hook/send`, con llave propia) y recibir los entrantes: cada número puede reenviar lo que le llega a una
+  dirección configurada (ajuste `smsfwd:<did>`), con enlaces a las imágenes incluidos.
 - **Puerta de acceso:** la API clásica de Vicidial (`/vicidial/non_agent_api.php` y `/agc/api.php`) queda accesible para
   integraciones externas (piden su propio usuario y contraseña), y las redirecciones al panel ya no arrastran los
   parámetros de la dirección a los registros.
