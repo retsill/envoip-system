@@ -2,6 +2,9 @@
 
 ## 1.0.3 — 2026-10-13
 
+- **SMS cuando VoIP.ms tarda:** el envío espera hasta 50 s a VoIP.ms (a veces responde tarde pero el mensaje sale) y
+  explica el motivo en vez de un error técnico. La puerta HTTP contesta «en cola» a los 12 s para que quien llama no
+  se rinda y repita el envío. Se corrige un error que tapaba el motivo real de los fallos de envío de varias partes.
 - **Puerta SMS por HTTP:** integraciones externas (Fundix…) pueden enviar SMS/MMS por nuestros números
   (`/api/sms-hook/send`, con llave propia) y recibir los entrantes: cada número puede reenviar lo que le llega a una
   dirección configurada (ajuste `smsfwd:<did>`), con enlaces a las imágenes incluidos.

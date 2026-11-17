@@ -44,12 +44,21 @@ smsWebhook.post(
       }
     }
     if (!to || (!text && !media.length)) throw new HttpError(400, 'Faltan el destino (to) o el texto (text)');
-    const row = await sms.send({ peer: to, body: text, media, did: p.from || (await sms.gatewayDefaultDid()), source: 'gateway' });
-    res.status(row.status === 'sent' ? 200 : 502).json({
-      ok: row.status === 'sent',
-      id: row.id,
-      status: row.status,
-      error: row.error || undefined,
+    // Quien llama suele esperar solo 20 s y VoIP.ms a veces tarda más: si pasan 12 s sin respuesta se contesta
+    // «en cola» (el mensaje sigue enviándose y su estado final queda en la pantalla de Mensajes). Así no hay
+    // falsos fallos ni envíos repetidos.
+    let queuedId = null;
+    const work = sms.send({ peer: to, body: text, media, did: p.from || (await sms.gatewayDefaultDid()), source: 'gateway', onQueued: (id) => (queuedId = id) });
+    work.catch(() => {}); // si el envío falla después de responder, queda guardado como fallido
+    const first = await Promise.race([work, new Promise((r) => setTimeout(() => r(null), 12000))]);
+    if (!first) {
+      return res.status(202).json({ ok: true, id: queuedId, status: 'queued', mediaOmitida: skipped.length ? skipped : undefined });
+    }
+    res.status(first.status === 'sent' ? 200 : 502).json({
+      ok: first.status === 'sent',
+      id: first.id,
+      status: first.status,
+      error: first.error || undefined,
       mediaOmitida: skipped.length ? skipped : undefined,
     });
   })

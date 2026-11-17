@@ -59,11 +59,22 @@ export async function saveConfig(b) {
 // ---------------------------------------------------------------- Cliente VoIP.ms
 const VOIPMS = 'https://voip.ms/api/v1/rest.php';
 
-async function voipms(cfg, method, params, post = false) {
+async function voipms(cfg, method, params, post = false, timeoutMs) {
   const all = { api_username: cfg.voipmsUser, api_password: cfg.voipmsPass, method, ...params };
-  const res = post
-    ? await fetch(VOIPMS, { method: 'POST', body: new URLSearchParams(all), signal: AbortSignal.timeout(30000) })
-    : await fetch(`${VOIPMS}?${new URLSearchParams(all)}`, { signal: AbortSignal.timeout(20000) });
+  let res;
+  try {
+    res = post
+      ? await fetch(VOIPMS, { method: 'POST', body: new URLSearchParams(all), signal: AbortSignal.timeout(timeoutMs || 30000) })
+      : await fetch(`${VOIPMS}?${new URLSearchParams(all)}`, { signal: AbortSignal.timeout(timeoutMs || 20000) });
+  } catch (e) {
+    // VoIP.ms a veces tarda más de lo normal y el mensaje sale igualmente: se explica en vez de un «aborted»
+    if (e?.name === 'TimeoutError' || e?.name === 'AbortError') {
+      const err = new HttpError(504, 'VoIP.ms tardó demasiado en responder. El mensaje puede haber salido: compruébalo en la conversación antes de repetirlo', { code: 'timeout' });
+      err.code = 'timeout';
+      throw err;
+    }
+    throw e;
+  }
   const data = await res.json().catch(() => ({ status: `http_${res.status}` }));
   if (data.status !== 'success') {
     const err = new HttpError(502, voipmsError(data.status), { code: data.status });
@@ -369,14 +380,14 @@ export async function usedToday(did) {
 /** sendSMS con un reintento si VoIP.ms tarda o falla en su lado (timeout, 5xx de Cloudflare/servidor). */
 async function sendWithRetry(cfg, params) {
   try {
-    return await voipms(cfg, 'sendSMS', params);
+    return await voipms(cfg, 'sendSMS', params, false, 50000);
   } catch (e) {
     // Solo si VoIP.ms ni siquiera recibió la petición (Cloudflare no pudo conectar). Si tardó en responder, el SMS
     // puede haber salido: reintentar lo duplicaría.
     const transient = ['http_521', 'http_522', 'http_523'].includes(e.code);
     if (!transient) throw e;
     await sleep(3000);
-    return voipms(cfg, 'sendSMS', params);
+    return voipms(cfg, 'sendSMS', params, false, 50000);
   }
 }
 
@@ -385,7 +396,7 @@ async function sendWithRetry(cfg, params) {
  * media: [{ name, data }] con data en base64 (sin prefijo data:).
  * Devuelve el mensaje guardado (con estado sent o failed).
  */
-export async function send({ peer, body, media = [], user, leadId, did, allowed, preferred, source = 'web' }) {
+export async function send({ peer, body, media = [], user, leadId, did, allowed, preferred, source = 'web', onQueued }) {
   const cfg = await getConfig({ withSecrets: true });
   if (!cfg.available || !cfg.enabled) throw new HttpError(400, 'La mensajería SMS no está configurada (Administración → Mensajería SMS)');
   const to = normalize(peer);
@@ -434,6 +445,7 @@ export async function send({ peer, body, media = [], user, leadId, did, allowed,
     [from, to, text, saved.length ? JSON.stringify(saved.map((s) => `media:${s.file}`)) : null, lead, user || null, source]
   );
   const id = res.insertId;
+  onQueued?.(id);
   try {
     let providerId;
     if (saved.length) {
@@ -449,7 +461,11 @@ export async function send({ peer, body, media = [], user, leadId, did, allowed,
         try {
           providerId = (await sendWithRetry(cfg, { did: from, dst: to, message: part })).sms;
         } catch (e) {
-          if (i > 0) e.message = `${errText(e)} (enviadas ${i} de ${parts.length} partes)`;
+          if (i > 0) {
+            const err = new HttpError(502, `${errText(e)} (enviadas ${i} de ${parts.length} partes)`, { code: e.code });
+            err.code = e.code;
+            throw err;
+          }
           throw e;
         }
       }
